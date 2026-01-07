@@ -1,3 +1,6 @@
+# Calib_ChargeTagger (JH fork)
+[Original repo](https://github.com/cramonal/Calib_ChargeTagger) created by Clara Ramon Alvarez. 
+
 ## Setting up package
 
 ### Creating a virtual environment
