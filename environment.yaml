@@ -1,4 +1,4 @@
-name: hh
+name: ttbar
 channels:
   - conda-forge
   - defaults
