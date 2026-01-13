@@ -1,4 +1,5 @@
 # Calib_ChargeTagger (JH fork)
+
 [Original repo](https://github.com/cramonal/Calib_ChargeTagger) created by Clara Ramon Alvarez. 
 
 ## Setting up package
@@ -14,6 +15,8 @@ cd Calib_ChargeTagger
 # Download the micromamba setup script (change if needed for your machine https://mamba.readthedocs.io/en/latest/installation/micromamba-installation.html)
 # Install: (the micromamba directory can end up taking O(1-10GB) so make sure the directory you're using allows that quota)
 "${SHELL}" <(curl -L micro.mamba.pm/install.sh)
+# Alternative (Homebrew-based) installer if the above times out:
+# ./setup_micromamba.sh
 # You may need to restart your shell
 micromamba env create -f environment.yaml
 micromamba activate ttbar
@@ -92,5 +95,4 @@ e.g.
 ```bash
 python boostedhh/condor/check_jobs.py --analysis bbtautau --tag 25Apr24_v12_private_signal --processor skimmer --check-running --year 2022EE
 ```
-
 
