@@ -1,6 +1,28 @@
 # Calib_ChargeTagger (JH fork)
 
-[Original repo](https://github.com/cramonal/Calib_ChargeTagger) created by Clara Ramon Alvarez. 
+[Original repo](https://github.com/cramonal/Calib_ChargeTagger) created by Clara Ramon Alvarez.
+
+## Overview
+
+- Coffea-based NanoAOD skimming and object selection for bb->tautau/ttbar-style analyses.
+- `src/run.py` runs the `ttSkimmer` processor, which reads NanoAOD ROOT files and writes new skim
+  outputs (parquet and optional ROOT) without modifying input files in place.
+- The `ttSkimmer` workflow (see `src/bbtautau/processors/ttSkimmer.py`) does the following:
+  - Builds physics objects: tight electrons and muons; AK4 jets with JECs and lepton overlap removal.
+  - Selects AK4 b-jets using `btagRobustParTAK4B` and a fixed working point (`bcut = 0.4319`).
+  - Computes event-level quantities such as HT, jet/lepton multiplicities, and MET.
+  - Saves trigger bits and trigger-matching flags (HLT selections are computed; triggers are not applied by
+    default in the current configuration).
+  - Applies event selections: MET filters, jet-veto map, >= 1 lepton, and >= 2 b-tagged AK4 jets
+    (plus optional prescale when enabled).
+  - For MC, adds weights and variations (pileup, PS, scale/PDF where applicable) and normalizes to xsec.
+  - For TT1L2Q samples, saves gen-level/top-matching info for jets and leptons.
+- Skimmed branch content includes lepton/jet kinematics and charge-tagger variables such as
+  `ParTPosvsAll`, `ParTNegvsAll`, `ParTPosvsNeg`, `PflavCharge`, `FlavSplit`, and `btagRobustParTAK4B`,
+  along with event IDs, pileup, HLT bits, and per-event weights.
+- Supports local/dask execution and Condor submission via `src/condor/submit.py`.
+- Postprocessing utilities for template production, sensitivity studies, BDT training, and combine workflows.
+- Depends on the `boostedhh` utilities (submodule) for run orchestration and common corrections.
 
 ## Setting up package
 
@@ -95,4 +117,3 @@ e.g.
 ```bash
 python boostedhh/condor/check_jobs.py --analysis bbtautau --tag 25Apr24_v12_private_signal --processor skimmer --check-running --year 2022EE
 ```
-
