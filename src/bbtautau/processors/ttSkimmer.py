@@ -440,7 +440,9 @@ class ttSkimmer(SkimmerABC):
         eventVars["nElectrons"] = ak.num(electrons).to_numpy()
         eventVars["nMuons"] = ak.num(muons).to_numpy()
         eventVars["nJets"] = ak.num(jets).to_numpy()
-        eventVars["nBJets"] = ak.num(jets[jets.btagRobustParTAK4B >= bcut]).to_numpy()
+        eventVars["nBJets"] = ak.num(
+            jets[jets.btagRobustParTAK4B >= self.ak4_bjet_selection["bcut"]]
+        ).to_numpy()
 
         # jin for CA
         # eventVars["CA_matched_tau_pt_sum"] = ca_tau_pt_sum.to_numpy()
