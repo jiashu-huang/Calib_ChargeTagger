@@ -17,31 +17,31 @@ import numpy as np
 from boostedhh import hh_vars
 from boostedhh.processors import SkimmerABC, utils
 from boostedhh.processors.corrections import (
-        JECs,
-        add_pileup_weight,
-        add_ps_weight,
-        get_jetveto_event,
-        get_pdf_weights,
-        get_scale_weights,
-        )
+    JECs,
+    add_pileup_weight,
+    add_ps_weight,
+    get_jetveto_event,
+    get_pdf_weights,
+    get_scale_weights,
+)
 from boostedhh.processors.utils import (
-        P4,
-        PAD_VAL,
-        add_selection,
-        pad_val,
-        )
+    P4,
+    PAD_VAL,
+    add_selection,
+    pad_val,
+)
 from coffea import processor
 from coffea.analysis_tools import PackedSelection, Weights
 
-from bbtautau.HLTs import HLTs #HLTs sigle mu single e maybe to dilep? and split in categoires
+from bbtautau.HLTs import HLTs
 
 from . import GenSelection, objects
 
 # mapping samples to the appropriate function for doing gen-level selections
 gen_selection_dict = {
-        "TT1L2Q": GenSelection.gen_selection_Top_semi,
-        #"TTdilep": GenSelection.gen_selection_TTdi,
-        }
+    "TT1L2Q": GenSelection.gen_selection_Top_semi,
+    # "TTdilep": GenSelection.gen_selection_TTdi,
+}
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -57,83 +57,83 @@ class ttSkimmer(SkimmerABC):
 
     # name in nano files: name in the skimmed output
     skim_vars = {  # noqa: RUF012
-            "Jet": {
-                **P4,
-                "rawFactor": "rawFactor",
-                "btagPNetB": "btagPNetB",#RobustPrT and chargetagger
-                "ParTPosvsAll": "ParTPosvsAll", 
-                "ParTNegvsAll": "ParTNegvsAll",
-                "ParTPosvsNeg": "ParTPosvsNeg",
-                "PflavCharge": "PflavCharge",
-                "FlavSplit": "FlavSplit",
-                "btagRobustParTAK4B": "btagRobustParTAK4B"
-                },
-            "MET": {
-                "pt": "Pt",
-                "phi": "Phi",
-                },
-            "Lepton": {
-                **P4,
-                "charge": "charge",
-                },
-            # "Tau": {
-            #     **P4,
-            #     "charge": "charge",
-            #     "idDeepTau2018v2p5VSjet": "DeepTauvsJet",
-            #     "idDeepTau2018v2p5VSmu": "DeepTauvsMu",
-            #     "idDeepTau2018v2p5VSe": "DeepTauvsE",
-            # },
-            #"GenHiggs": P4,
-            "Event": {
-                "run": "run",
-                "event": "event",
-                "luminosityBlock": "luminosityBlock",
-                },
-            "Pileup": {
-                "nPU",
-                },
-            "TriggerObject": {
-                "pt": "Pt",
-                "eta": "Eta",
-                "phi": "Phi",
-                "filterBits": "Bit",
-                },
-            }
+        "Jet": {
+            **P4,
+            "rawFactor": "rawFactor",
+            "btagPNetB": "btagPNetB",  # RobustPrT and chargetagger
+            "ParTPosvsAll": "ParTPosvsAll",
+            "ParTNegvsAll": "ParTNegvsAll",
+            "ParTPosvsNeg": "ParTPosvsNeg",
+            "PflavCharge": "PflavCharge",
+            "FlavSplit": "FlavSplit",
+            "btagRobustParTAK4B": "btagRobustParTAK4B",
+        },
+        "MET": {
+            "pt": "Pt",
+            "phi": "Phi",
+        },
+        "Lepton": {
+            **P4,
+            "charge": "charge",
+        },
+        # "Tau": {
+        #     **P4,
+        #     "charge": "charge",
+        #     "idDeepTau2018v2p5VSjet": "DeepTauvsJet",
+        #     "idDeepTau2018v2p5VSmu": "DeepTauvsMu",
+        #     "idDeepTau2018v2p5VSe": "DeepTauvsE",
+        # },
+        # "GenHiggs": P4,
+        "Event": {
+            "run": "run",
+            "event": "event",
+            "luminosityBlock": "luminosityBlock",
+        },
+        "Pileup": {
+            "nPU",
+        },
+        "TriggerObject": {
+            "pt": "Pt",
+            "eta": "Eta",
+            "phi": "Phi",
+            "filterBits": "Bit",
+        },
+    }
 
     # only applied if fatjet_bb_preselection is True
     preselection = {  # noqa: RUF012
-            # roughly, 85% signal efficiency, 2% QCD efficiency (pT: 250-400, mSD:0-250, mRegLegacy:40-250)
-            #"pnet-legacy": 0.8,
-            #"pnet-v12": 0.3,
-            #"glopart-v2": 0.3,
-            #at least 1 good iso muon or electron
-            #2btags
-            }
+        # roughly, 85% signal efficiency, 2% QCD efficiency (pT: 250-400, mSD:0-250, mRegLegacy:40-250)
+        # "pnet-legacy": 0.8,
+        # "pnet-v12": 0.3,
+        # "glopart-v2": 0.3,
+        # at least 1 good iso muon or electron
+        # 2btags
+    }
 
     bcut = 0.4319
     ak4_bjet_selection = {  # noqa: RUF012
-            "pt": 25,
-            "eta_max": 2.5,
-            "id": "tight",
-            "dr_leptons": 0.4,
-            "bcut" : bcut
-            }
+        "pt": 25,
+        "eta_max": 2.5,
+        "id": "tight",
+        "dr_leptons": 0.4,
+        "bcut": bcut,
+    }
 
     ak4_bjet_lepton_selection = {  # noqa: RUF012
-            "electron_pt": 5,
-            "muon_pt": 7,
-            }  
+        "electron_pt": 5,
+        "muon_pt": 7,
+    }
 
     def __init__(
-            self,
-            xsecs: dict = None,
-            save_systematics: bool = False,
-            region: str = "signal",
-            nano_version: str = "v12_private",
-            fatjet_pt_cut: float = None,
-            fatjet_bb_preselection: bool = False,
-            prescale_factor: int = None,
-            ):
+        self,
+        xsecs: dict = None,
+        save_systematics: bool = False,
+        region: str = "signal",
+        nano_version: str = "v12_private",
+        fatjet_pt_cut: float = None,
+        fatjet_bb_preselection: bool = False,
+        prescale_factor: int = None,
+    ):
         super().__init__()
 
         self.XSECS = xsecs if xsecs is not None else {}  # in pb
@@ -147,10 +147,10 @@ class ttSkimmer(SkimmerABC):
         self._accumulator = processor.dict_accumulator({})
         self._fatjet_bb_preselection = fatjet_bb_preselection
         self._prescale_factor = prescale_factor
-
+        self._fatjet_pt_cut = fatjet_pt_cut
 
         # CA variablesa
-        '''
+        """
         ca_vars = [
             "mass",
             "msoftdrop",
@@ -180,10 +180,10 @@ class ttSkimmer(SkimmerABC):
         # update fatjet pT cut
         if fatjet_pt_cut is not None:
             self.fatjet_selection["pt"] = fatjet_pt_cut
-        '''
+        """
         logger.info(
-                f"Running skimmer with:\nsystematics {self._systematics}\nregion {self._region}"
-                )
+            f"Running skimmer with:\nsystematics {self._systematics}\nregion {self._region}"
+        )
 
     @property
     def accumulator(self):
@@ -201,15 +201,15 @@ class ttSkimmer(SkimmerABC):
 
         # datasets for saving jec variations
         isJECs = (  # noqa: F841
-                "HHto4B" in dataset
-                or "TT" in dataset
-                or "Wto2Q" in dataset
-                or "Zto2Q" in dataset
-                or "Hto2B" in dataset
-                or "WW" in dataset
-                or "ZZ" in dataset
-                or "WZ" in dataset
-                )
+            "HHto4B" in dataset
+            or "TT" in dataset
+            or "Wto2Q" in dataset
+            or "Zto2Q" in dataset
+            or "Hto2B" in dataset
+            or "WW" in dataset
+            or "ZZ" in dataset
+            or "WZ" in dataset
+        )
 
         # gen-weights
         gen_weights = events["genWeight"].to_numpy() if not isData else None
@@ -231,15 +231,11 @@ class ttSkimmer(SkimmerABC):
         print("starting object selection", f"{time.time() - start:.2f}")
 
         # Leptons
-        num_leptons = 3 #remove this
+        num_leptons = 3  # remove this
         electrons, etrigvars = objects.good_electrons(events, events.Electron, year)
         muons, mtrigvars = objects.good_muons(events, events.Muon, year)
-        #taus, ttrigvars = objects.good_taus(events, events.Tau, year)
-        #boostedtaus = objects.good_boostedtaus(events, events.boostedTau)
-
-        # SubJets
-        num_subjets = 3
-        subjets = events.SubJet
+        # taus, ttrigvars = objects.good_taus(events, events.Tau, year)
+        # boostedtaus = objects.good_boostedtaus(events, events.boostedTau)
 
         # These are bools saying if the lepton is matched to a trigger object or not
         trigMatchVars = {**etrigvars, **mtrigvars}
@@ -253,16 +249,16 @@ class ttSkimmer(SkimmerABC):
         # AK4 Jets
         num_ak4_jets = 8
         jets, jec_shifted_jetvars = JEC_loader.get_jec_jets(
-                events,
-                events.Jet,
-                year,
-                isData,
-                jecs=utils.jecs,
-                fatjets=False,
-                applyData=True,
-                dataset=dataset,
-                nano_version=self._nano_version,
-                )
+            events,
+            events.Jet,
+            year,
+            isData,
+            jecs=utils.jecs,
+            fatjets=False,
+            applyData=True,
+            dataset=dataset,
+            nano_version=self._nano_version,
+        )
 
         if JEC_loader.met_factory is not None:
             met = JEC_loader.met_factory.build(events.PFMET, jets, {}) if isData else events.PFMET
@@ -271,13 +267,19 @@ class ttSkimmer(SkimmerABC):
 
         print("ak4 JECs", f"{time.time() - start:.2f}")
 
-        jets = objects.good_ak4jets(jets, self._nano_version,  events, muon_pt=self.ak4_bjet_lepton_selection["muon_pt"],    electron_pt=self.ak4_bjet_lepton_selection["electron_pt"], dr_leptons = 0.4)
+        jets = objects.good_ak4jets(
+            jets,
+            self._nano_version,
+            events,
+            muon_pt=self.ak4_bjet_lepton_selection["muon_pt"],
+            electron_pt=self.ak4_bjet_lepton_selection["electron_pt"],
+            dr_leptons=0.4,
+        )
         ht = ak.sum(jets.pt, axis=1)
         print("ak4", f"{time.time() - start:.2f}")
 
-
         # AK8 Jetsa
-        '''
+        """
         num_ak8_jets = 3
         fatjets = objects.get_ak8jets(events.FatJet)  # this adds all our extra variables e.g. TXbb
         fatjets, jec_shifted_fatjetvars = JEC_loader.get_jec_jets(
@@ -315,14 +317,14 @@ class ttSkimmer(SkimmerABC):
             **self.ak4_bjet_lepton_selection,
             sort_by="nearest",
         )
-        '''
+        """
         ak4_bjets = objects.ak4_bjet(
             jets,
             events,
             **self.ak4_bjet_selection,
             **self.ak4_bjet_lepton_selection,
-            )
-            # # JMSR
+        )
+        # # JMSR
         # # TODO: add variations per variable
         # bb_jmsr_shifted_vars = get_jmsr(
         #     fatjets_xbb,
@@ -333,7 +335,6 @@ class ttSkimmer(SkimmerABC):
         #     isData=isData,
         # )
 
-
         #########################
         # Save / derive variables
         #########################
@@ -342,47 +343,48 @@ class ttSkimmer(SkimmerABC):
         genVars = {}
         for d in gen_selection_dict:
             if d in dataset:
-                vars_dict = gen_selection_dict[d](events, jets, electrons, muons, selection_args, P4)
+                vars_dict = gen_selection_dict[d](
+                    events, jets, electrons, muons, selection_args, P4
+                )
                 genVars = {**genVars, **vars_dict}
 
         # used for normalization to cross section below
         gen_selected = (
-                selection.all(*selection.names)
-                if len(selection.names)
-                else np.ones(len(events)).astype(bool)
-                )
+            selection.all(*selection.names)
+            if len(selection.names)
+            else np.ones(len(events)).astype(bool)
+        )
         logging.info(f"Passing gen selection: {np.sum(gen_selected)} / {len(events)}")
 
         # Lepton variables
         electronVars = {
-                f"Electron{key}": pad_val(electrons[var], num_leptons, axis=1)
-                for (var, key) in self.skim_vars["Lepton"].items()
-                }
+            f"Electron{key}": pad_val(electrons[var], num_leptons, axis=1)
+            for (var, key) in self.skim_vars["Lepton"].items()
+        }
         muonVars = {
-                f"Muon{key}": pad_val(muons[var], num_leptons, axis=1)
-                for (var, key) in self.skim_vars["Lepton"].items()
-                }
+            f"Muon{key}": pad_val(muons[var], num_leptons, axis=1)
+            for (var, key) in self.skim_vars["Lepton"].items()
+        }
         leptonVars = {**electronVars, **muonVars}
-
 
         # AK4 Jet variables
         jet_skimvars = self.skim_vars["Jet"]
         if not isData:
             jet_skimvars = {
-                    **jet_skimvars,
-                    "pt_gen": "MatchedGenJetPt",
-                    }
+                **jet_skimvars,
+                "pt_gen": "MatchedGenJetPt",
+            }
 
         ak4JetVars = {
-                f"ak4Jet{key}": pad_val(jets[var], num_ak4_jets, axis=1)
-                for (var, key) in jet_skimvars.items()
-                }
+            f"ak4Jet{key}": pad_val(jets[var], num_ak4_jets, axis=1)
+            for (var, key) in jet_skimvars.items()
+        }
         ak4bTagJetVars = {
-                f"ak4bTagJet{key}": pad_val(ak4_bjets[var], 6, axis=1)
-                for (var, key) in jet_skimvars.items()
-                }
+            f"ak4bTagJet{key}": pad_val(ak4_bjets[var], 6, axis=1)
+            for (var, key) in jet_skimvars.items()
+        }
 
-        '''  
+        """
         if len(ak4_jets_awayfromak8) == 2:
             ak4JetAwayVars = {
                 f"AK4JetAway{key}": pad_val(
@@ -399,8 +401,7 @@ class ttSkimmer(SkimmerABC):
                 f"AK4JetAway{key}": pad_val(ak4_jets_awayfromak8[var], 2, axis=1)
                 for (var, key) in jet_skimvars.items()
             }
-        '''
-
+        """
 
         # # JEC and JMSR
         # if self._region == "signal" and isJECs:
@@ -468,7 +469,6 @@ class ttSkimmer(SkimmerABC):
 
         print("HLT vars", f"{time.time() - start:.2f}")
 
-
         # # JEC variations for VBF Jets
         # if self._region == "signal" and isJECs:
         #     for var in ["pt"]:
@@ -533,8 +533,8 @@ class ttSkimmer(SkimmerABC):
 
         # # >=2 AK8 jets passing selections
         # add_selection("ak8_numjets", (ak.num(fatjets) >= 2), *selection_args)
-        add_selection("1lep", ak.num(muons)+ak.num(electrons) >= 1, *selection_args)
-        add_selection("2bjets", ak.num(ak4_bjets)>=2, *selection_args)
+        add_selection("1lep", ak.num(muons) + ak.num(electrons) >= 1, *selection_args)
+        add_selection("2bjets", ak.num(ak4_bjets) >= 2, *selection_args)
         # >=1 AK8 jets with pT cut (230 GeV by default)
 
         # # >=1 AK8 jets with mSD >= 40 GeV
@@ -561,7 +561,7 @@ class ttSkimmer(SkimmerABC):
 
         # VBF veto cut (not now)
         # add_selection("vbf_veto", ~(cut_vbf), *selection_args)
-        '''    
+        """
         if self._fatjet_bb_preselection:
             # at least 1 jet with ParTXbbvsQCDTop > 0.3
             cut_bb = (
@@ -572,11 +572,9 @@ class ttSkimmer(SkimmerABC):
                 >= 1
             )
             add_selection("ak8_bb_preselection", cut_bb, *selection_args)
-        '''
+        """
         if self._prescale_factor:
-            cut_prescale = (
-                events.event % self._prescale_factor == 0
-            )
+            cut_prescale = events.event % self._prescale_factor == 0
             add_selection("prescale", cut_prescale, *selection_args)
 
         print("Selection", f"{time.time() - start:.2f}")

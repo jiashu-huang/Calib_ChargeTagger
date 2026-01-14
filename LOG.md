@@ -130,7 +130,7 @@ python src/run.py \
   --save-root
 ```
 
-Note that our dataset is `/TTtoLplusNu2Q-2Jets_TuneCP5_13p6TeV_amcatnloFXFX-pythia8/Run3Summer22EEMiniAODv4-130X_mcRun3_2022_realistic_postEE_v6-v3/MINIAODSIM`, 
+Note that our dataset is `/TTtoLplusNu2Q-2Jets_TuneCP5_13p6TeV_amcatnloFXFX-pythia8/Run3Summer22EEMiniAODv4-130X_mcRun3_2022_realistic_postEE_v6-v3/MINIAODSIM`,
 so we must choose our tags accordingly.
 
 Command line output:
@@ -194,7 +194,7 @@ Traceback (most recent call last):
 Exception: Failed processing file: WorkItem(dataset='2022EE_CHARGE', filename='/home/jhuan166/Vcb/CMSSW_15_1_0_patch4/output/315d7993-98ba-431b-8fb5-8835abca47cb_CMSSW_15_CHARGE_NanoAOD.root', treename='Events', entrystart=0, entrystop=9295, fileuuid=b'd\x98\x02\x0e\xed\xf9\x11\xf0\xa5\xcf2\x80\x94\x80\xbe\xef', usermeta={})
 ```
 
-Now try: 
+Now try:
 ```bash
 python src/run.py \
   --processor skimmer \
@@ -205,7 +205,7 @@ python src/run.py \
   --save-root
 ```
 
-Seems like the suggested patch is 
+Seems like the suggested patch is
 ```python
 # Calib_ChargeTagger/src/bbtautau/processors/ttSkimmer.py:433
 eventVars["nBJets"] = ak.num(

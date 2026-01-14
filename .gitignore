@@ -192,5 +192,8 @@ data/.sites_map.json
 
 *.C
 
-# Keep setup_micromamba.sh 
+# Keep setup_micromamba.sh
 !setup_micromamba.sh
+
+# Ignore output txt
+num_batches_*.txt
