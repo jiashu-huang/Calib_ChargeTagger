@@ -95,3 +95,122 @@ Validate Dependabot Config (v2)......................(no files to check)Skipped
 Validate GitHub Workflows............................(no files to check)Skipped
 Validate ReadTheDocs Config..........................(no files to check)Skipped
 ```
+
+
+## 2025-01-13
+
+The following commands allowed me to install `boostedhh` successfully:
+
+```bash
+git submodule update --init --recursive
+# optional sanity check
+ls boostedhh
+
+# install the submodule as a package
+cd boostedhh
+pip install -e .
+cd ..
+```
+
+I need to update README.md later.
+
+## 2025-01-14
+
+To run `Calib_ChargeTagger`, ChatGPT Codex suggests:
+
+```bash
+micromamba activate ttbar
+cd /home/jhuan166/Vcb/Calib_ChargeTagger
+python src/run.py \
+  --processor skimmer \
+  --year 2022EE \
+  --files /home/jhuan166/Vcb/CMSSW_15_1_0_patch4/output/315d7993-98ba-431b-8fb5-8835abca47cb_CMSSW_15_CHARGE_NanoAOD.root \
+  --files-name CHARGE \
+  --file-tag charge_run1 \
+  --save-root
+```
+
+Note that our dataset is `/TTtoLplusNu2Q-2Jets_TuneCP5_13p6TeV_amcatnloFXFX-pythia8/Run3Summer22EEMiniAODv4-130X_mcRun3_2022_realistic_postEE_v6-v3/MINIAODSIM`, 
+so we must choose our tags accordingly.
+
+Command line output:
+```text
+INFO:bbtautau.processors.ttSkimmer:Running skimmer with:
+systematics False
+region signal
+Running on fileset {'2022EE_CHARGE': ['/home/jhuan166/Vcb/CMSSW_15_1_0_patch4/output/315d7993-98ba-431b-8fb5-8835abca47cb_CMSSW_15_CHARGE_NanoAOD.root']}
+Preprocessing 100% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1/1 [ 0:00:00 < 0:00:00 | ? file/s ]
+Processing   0% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/4 [ 0:00:00 < -:--:-- | ? chunk/s ]INFO:root:# events 9295
+/isilon/export/home/jhuan166/Vcb/Calib_ChargeTagger/boostedhh/src/boostedhh/corrections/jec_com
+piled_py311.pkl.gz
+starting object selection 2.71
+Leptons 3.21
+ak4 JECs 5.28
+ak4 5.49
+Processing   0% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/4 [ 0:00:00 < -:--:-- | ? chunk/s ]INFO:root:Passing gen selection: 9295 / 9295
+Processing   0% ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/4 [ 0:00:06 < -:--:-- | ? chunk/s ]
+Traceback (most recent call last):
+  File "/isilon/export/home/jhuan166/micromamba/envs/ttbar/lib/python3.11/site-packages/coffea/processor/executor.py", line 1654, in _work_function
+    out = processor_instance.process(events)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/isilon/export/home/jhuan166/Vcb/Calib_ChargeTagger/src/bbtautau/processors/ttSkimmer.py", line 443, in process
+    eventVars["nBJets"] = ak.num(jets[jets.btagRobustParTAK4B >= bcut]).to_numpy()
+                                                                 ^^^^
+NameError: name 'bcut' is not defined
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/isilon/export/home/jhuan166/Vcb/Calib_ChargeTagger/src/run.py", line 124, in <module>
+    main(args)
+  File "/isilon/export/home/jhuan166/Vcb/Calib_ChargeTagger/src/run.py", line 98, in main
+    run_utils.run(
+  File "/isilon/export/home/jhuan166/Vcb/Calib_ChargeTagger/boostedhh/src/boostedhh/run_utils.py", line 275, in run
+    out, metrics = run(fileset, "Events", processor_instance=p)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/isilon/export/home/jhuan166/micromamba/envs/ttbar/lib/python3.11/site-packages/coffea/processor/executor.py", line 1700, in __call__
+    wrapped_out = self.run(fileset, processor_instance, treename)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/isilon/export/home/jhuan166/micromamba/envs/ttbar/lib/python3.11/site-packages/coffea/processor/executor.py", line 1848, in run
+    wrapped_out, e = executor(chunks, closure, None)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/isilon/export/home/jhuan166/micromamba/envs/ttbar/lib/python3.11/site-packages/coffea/processor/executor.py", line 672, in __call__
+    accumulate(
+  File "/isilon/export/home/jhuan166/micromamba/envs/ttbar/lib/python3.11/site-packages/coffea/processor/accumulator.py", line 95, in accumulate
+    accum = next(gen)
+            ^^^^^^^^^
+  File "/isilon/export/home/jhuan166/micromamba/envs/ttbar/lib/python3.11/site-packages/coffea/processor/accumulator.py", line 92, in <genexpr>
+    gen = (x for x in items if x is not None)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/isilon/export/home/jhuan166/micromamba/envs/ttbar/lib/python3.11/site-packages/rich/progress.py", line 1231, in track
+    for value in sequence:
+  File "/isilon/export/home/jhuan166/micromamba/envs/ttbar/lib/python3.11/site-packages/coffea/processor/executor.py", line 1367, in automatic_retries
+    raise e
+  File "/isilon/export/home/jhuan166/micromamba/envs/ttbar/lib/python3.11/site-packages/coffea/processor/executor.py", line 1336, in automatic_retries
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/isilon/export/home/jhuan166/micromamba/envs/ttbar/lib/python3.11/site-packages/coffea/processor/executor.py", line 1656, in _work_function
+    raise Exception(f"Failed processing file: {item!r}") from e
+Exception: Failed processing file: WorkItem(dataset='2022EE_CHARGE', filename='/home/jhuan166/Vcb/CMSSW_15_1_0_patch4/output/315d7993-98ba-431b-8fb5-8835abca47cb_CMSSW_15_CHARGE_NanoAOD.root', treename='Events', entrystart=0, entrystop=9295, fileuuid=b'd\x98\x02\x0e\xed\xf9\x11\xf0\xa5\xcf2\x80\x94\x80\xbe\xef', usermeta={})
+```
+
+Now try: 
+```bash
+python src/run.py \
+  --processor skimmer \
+  --year 2022EE \
+  --files /home/jhuan166/Vcb/CMSSW_15_1_0_patch4/output/315d7993-98ba-431b-8fb5-8835abca47cb_CMSSW_15_CHARGE_NanoAOD.root \
+  --files-name TTtoLplusNu2Q-2Jets_TuneCP5_13p6TeV_amcatnloFXFX-pythia8 \
+  --file-tag TTtoLplusNu2Q_2022EE \
+  --save-root
+```
+
+Seems like the suggested patch is 
+```python
+# Calib_ChargeTagger/src/bbtautau/processors/ttSkimmer.py:433
+eventVars["nBJets"] = ak.num(
+    jets[jets.btagRobustParTAK4B >= self.ak4_bjet_selection["bcut"]]
+).to_numpy()
+```
+
+This works, so I am gonna push it up to GitHub.
