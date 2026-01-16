@@ -7,7 +7,7 @@
 - Coffea-based NanoAOD skimming and object selection for bb->tautau/ttbar-style analyses.
 - `src/run.py` runs the `ttSkimmer` processor, which reads NanoAOD ROOT files and writes new skim
   outputs (parquet and optional ROOT) without modifying input files in place.
-- The `ttSkimmer` workflow (see `src/bbtautau/processors/ttSkimmer.py`) does the following:
+- The `ttSkimmer` workflow (see `src/processors/ttSkimmer.py`) does the following:
   - Builds physics objects: tight electrons and muons; AK4 jets with JECs and lepton overlap removal.
   - Selects AK4 b-jets using `btagRobustParTAK4B` and a fixed working point (`bcut = 0.4319`).
   - Computes event-level quantities such as HT, jet/lepton multiplicities, and MET.

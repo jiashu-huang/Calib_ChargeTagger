@@ -62,6 +62,9 @@ Changelog = "https://github.com/LPC-HH/bbtautau/releases"
 [tool.hatch]
 version.path = "src/bbtautau/__init__.py"
 
+[tool.hatch.build.targets.wheel]
+packages = ["src/bbtautau", "src/processors"]
+
 [tool.hatch.envs.default]
 features = ["test"]
 scripts.test = "pytest {args}"

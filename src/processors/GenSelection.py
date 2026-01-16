@@ -9,16 +9,24 @@ from __future__ import annotations
 import awkward as ak
 import numpy as np
 from boostedhh.processors.utils import (
-        GEN_FLAGS,
-        P4,
-        PDGID,
-        add_selection,
-        pad_val,
-        )
+    GEN_FLAGS,
+    P4,
+    PDGID,
+    add_selection,
+    pad_val,
+)
 from coffea.nanoevents.methods.base import NanoEventsArray
-from coffea.nanoevents.methods.nanoaod import FatJetArray
+from coffea.nanoevents.methods.nanoaod import (
+    ElectronArray,
+    FatJetArray,
+    JetArray,
+    MuonArray,
+)
+
 TOP_PDGID = 6
 W_PDGID = 24
+LepArray = ElectronArray | MuonArray
+
 
 def _iterate_children(children, parent_pdgId):
     """Iterates through the children of a particle in case of photon scattering to find the final daughter particles"""
@@ -30,8 +38,8 @@ def _iterate_children(children, parent_pdgId):
             break
 
         children_children = ak.flatten(
-                children[np.abs(children.pdgId) == parent_pdgId].children, axis=3
-                )
+            children[np.abs(children.pdgId) == parent_pdgId].children, axis=3
+        )
 
         # get next layer of children
         children = ak.where(mask, children_children, children)
@@ -44,41 +52,41 @@ def _sum_taus(taut):
 
 
 def gen_selection_Top(
-        events: NanoEventsArray,
-        jets: JetArray,  # noqa: ARG001
-        fatjets: FatJetArray,
-        selection_args: list,  # noqa: ARG001
-        skim_vars: dict,
-        fatjet_str: str,
-        ):
+    events: NanoEventsArray,
+    jets: JetArray,  # noqa: ARG001
+    fatjets: FatJetArray,
+    selection_args: list,  # noqa: ARG001
+    skim_vars: dict,
+    fatjet_str: str,
+):
     """Get Hadronic Top and children information"""
     assert fatjet_str in [
-            "bbFatJet",
-            "ak8FatJet",
-            ], "fatjet_str parameter must be bbFatJet or ak8FatJet"
+        "bbFatJet",
+        "ak8FatJet",
+    ], "fatjet_str parameter must be bbFatJet or ak8FatJet"
 
     # finding tops
     tops = events.GenPart[
-            (abs(events.GenPart.pdgId) == TOP_PDGID) * events.GenPart.hasFlags(GEN_FLAGS)
-            ]
+        (abs(events.GenPart.pdgId) == TOP_PDGID) * events.GenPart.hasFlags(GEN_FLAGS)
+    ]
     GenTopVars = {f"GenTop{key}": tops[var].to_numpy() for (var, key) in skim_vars.items()}
 
     daughters = ak.flatten(tops.distinctChildren, axis=2)
     daughters = daughters[daughters.hasFlags(["fromHardProcess", "isLastCopy"])]
     daughters_pdgId = abs(daughters.pdgId)
-    print("daughters",daughters[(daughters_pdgId == W_PDGID)])
+    print("daughters", daughters[(daughters_pdgId == W_PDGID)])
     wboson_0 = ak.firsts(daughters[(daughters_pdgId == W_PDGID)][:, 0:1])
     wboson_1 = ak.firsts(daughters[(daughters_pdgId == W_PDGID)][:, 1:2])
     GenTopVars = {
-            **GenTopVars,
-            **{f"GenTopW0{key}": wboson_0[var].to_numpy() for (var, key) in skim_vars.items()},
-            **{f"GenTopW1{key}": wboson_1[var].to_numpy() for (var, key) in skim_vars.items()},
-            }
+        **GenTopVars,
+        **{f"GenTopW0{key}": wboson_0[var].to_numpy() for (var, key) in skim_vars.items()},
+        **{f"GenTopW1{key}": wboson_1[var].to_numpy() for (var, key) in skim_vars.items()},
+    }
 
     wboson_daughters = ak.flatten(daughters[(daughters_pdgId == W_PDGID)].distinctChildren, axis=2)
     wboson_daughters = wboson_daughters[
-            wboson_daughters.hasFlags(["fromHardProcess", "isLastCopy"])
-            ]
+        wboson_daughters.hasFlags(["fromHardProcess", "isLastCopy"])
+    ]
 
     bquark = daughters[(daughters_pdgId == 5)]
     matched_to_top = fatjets.metric_table(tops) < 0.8
@@ -92,16 +100,16 @@ def gen_selection_Top(
     bs_1 = ak.firsts(bquark[:, 1:2])
 
     numtop1 = ak.values_astype(fatjets.delta_r(qs_0) < 0.8, np.int32) + ak.values_astype(
-            fatjets.delta_r(qs_1) < 0.8, np.int32
-            )
+        fatjets.delta_r(qs_1) < 0.8, np.int32
+    )
     numtop2 = ak.values_astype(fatjets.delta_r(qs_2) < 0.8, np.int32) + ak.values_astype(
-            fatjets.delta_r(qs_3) < 0.8, np.int32
-            )
+        fatjets.delta_r(qs_3) < 0.8, np.int32
+    )
 
     fatjets["TopMatch"] = is_fatjet_matched
     fatjets["TopMatchIndex"] = ak.mask(
-            ak.argmin(fatjets.metric_table(tops), axis=2), fatjets["TopMatch"] == 1
-            )
+        ak.argmin(fatjets.metric_table(tops), axis=2), fatjets["TopMatch"] == 1
+    )
     fatjets["NumBMatchedTop1"] = ak.values_astype(fatjets.delta_r(bs_0) < 0.8, np.int32)
     fatjets["NumBMatchedTop2"] = ak.values_astype(fatjets.delta_r(bs_1) < 0.8, np.int32)
     fatjets["NumQMatchedTop1"] = numtop1
@@ -109,33 +117,33 @@ def gen_selection_Top(
 
     num_fatjets = 2
     FatJetVars = {
-            f"{fatjet_str}{var}": pad_val(fatjets[var], num_fatjets, axis=1)
-            for var in [
-                "TopMatch",
-                "TopMatchIndex",
-                "NumBMatchedTop1",
-                "NumBMatchedTop2",
-                "NumQMatchedTop1",
-                "NumQMatchedTop2",
-                ]
-            }
+        f"{fatjet_str}{var}": pad_val(fatjets[var], num_fatjets, axis=1)
+        for var in [
+            "TopMatch",
+            "TopMatchIndex",
+            "NumBMatchedTop1",
+            "NumBMatchedTop2",
+            "NumQMatchedTop1",
+            "NumQMatchedTop2",
+        ]
+    }
 
     return {**GenTopVars, **FatJetVars}
 
 
 def gen_selection_Top_semi(
-        events: NanoEventsArray,
-        jets: JetArray,  # noqa: ARG001
-        electrons: LepArray,
-        muons: LepArray,
-        selection_args: list,  # noqa: ARG001
-        skim_vars: dict,
-        ):
+    events: NanoEventsArray,
+    jets: JetArray,
+    electrons: LepArray,
+    muons: LepArray,
+    selection_args: list,  # noqa: ARG001
+    skim_vars: dict,
+):
 
     # finding tops
     tops = events.GenPart[
-            (abs(events.GenPart.pdgId) == TOP_PDGID) * events.GenPart.hasFlags(GEN_FLAGS)
-            ]
+        (abs(events.GenPart.pdgId) == TOP_PDGID) * events.GenPart.hasFlags(GEN_FLAGS)
+    ]
     GenTopVars = {f"GenTop{key}": tops[var].to_numpy() for (var, key) in skim_vars.items()}
 
     daughters = ak.flatten(tops.distinctChildren, axis=2)
@@ -145,33 +153,37 @@ def gen_selection_Top_semi(
     wboson_0 = ak.firsts(daughters[(daughters_pdgId == W_PDGID)][:, 0:1])
     wboson_1 = ak.firsts(daughters[(daughters_pdgId == W_PDGID)][:, 1:2])
     GenTopVars = {
-            **GenTopVars,
-            **{f"GenTopW0{key}": wboson_0[var].to_numpy() for (var, key) in skim_vars.items()},
-            **{f"GenTopW1{key}": wboson_1[var].to_numpy() for (var, key) in skim_vars.items()},
-            }
+        **GenTopVars,
+        **{f"GenTopW0{key}": wboson_0[var].to_numpy() for (var, key) in skim_vars.items()},
+        **{f"GenTopW1{key}": wboson_1[var].to_numpy() for (var, key) in skim_vars.items()},
+    }
 
     wboson_daughters = ak.flatten(daughters[(daughters_pdgId == W_PDGID)].distinctChildren, axis=2)
     wboson_daughters = wboson_daughters[
-            wboson_daughters.hasFlags(["fromHardProcess", "isLastCopy"])
-            ]
+        wboson_daughters.hasFlags(["fromHardProcess", "isLastCopy"])
+    ]
     wboson_daughters_pdgId = abs(wboson_daughters.pdgId)
 
     bquark = daughters[(daughters_pdgId == 5)]
-    #matched_to_top = fatjets.metric_table(tops) < 0.8
-    #is_fatjet_matched = ak.any(matched_to_top, axis=2)
+    # matched_to_top = fatjets.metric_table(tops) < 0.8
+    # is_fatjet_matched = ak.any(matched_to_top, axis=2)
 
-
-    #lepdecay = wboson_daughters[(wboson_daughters_pdgId == 13) or (wboson_daughters_pdgId ==11 ) ]
+    # lepdecay = wboson_daughters[(wboson_daughters_pdgId == 13) or (wboson_daughters_pdgId ==11 ) ]
 
     lep_mask = (wboson_daughters_pdgId == 11) | (wboson_daughters_pdgId == 13)
-    lep_nu_mask = (wboson_daughters_pdgId == 11) | (wboson_daughters_pdgId == 13) | (wboson_daughters_pdgId == 12) | (wboson_daughters_pdgId == 14)
+    lep_nu_mask = (
+        (wboson_daughters_pdgId == 11)
+        | (wboson_daughters_pdgId == 13)
+        | (wboson_daughters_pdgId == 12)
+        | (wboson_daughters_pdgId == 14)
+    )
     lepdecay = wboson_daughters[lep_mask]
-    ls_0 = ak.firsts(lepdecay[:, 0:1])   # first lepton per event/top
+    ls_0 = ak.firsts(lepdecay[:, 0:1])  # first lepton per event/top
     #    all_local_indices = ak.local_index(wboson_daughters, axis =1)
     print(lep_mask)
     print(lep_nu_mask)
-    #lep_indices = all_local_indices[lep_mask]
-    #print(lep_indices)
+    # lep_indices = all_local_indices[lep_mask]
+    # print(lep_indices)
 
     non_lep_nu_mask = ~lep_nu_mask
 
@@ -181,25 +193,24 @@ def gen_selection_Top_semi(
     qs_3 = ak.firsts(quark_daughters[:, 1:2])
     bs_0 = ak.firsts(bquark[:, 0:1])
     bs_1 = ak.firsts(bquark[:, 1:2])
-    
 
-    #fatjets["TopMatch"] = is_fatjet_matched
-    #fatjets["TopMatchIndex"] = ak.mask(
+    # fatjets["TopMatch"] = is_fatjet_matched
+    # fatjets["TopMatchIndex"] = ak.mask(
     #    ak.argmin(fatjets.metric_table(tops), axis=2), fatjets["TopMatch"] == 1
-    #)
+    # )
     jets["NumBMatchedTop1"] = ak.values_astype(jets.delta_r(bs_0) < 0.4, np.int32)
     jets["NumBMatchedTop2"] = ak.values_astype(jets.delta_r(bs_1) < 0.4, np.int32)
     electrons["NumlMatchedTop1"] = ak.values_astype(electrons.delta_r(ls_0) < 0.2, np.int32)
     muons["NumlMatchedTop1"] = ak.values_astype(muons.delta_r(ls_0) < 0.2, np.int32)
     jets["NumQMatchedTop1"] = ak.values_astype(jets.delta_r(qs_2) < 0.4, np.int32)
-    jets["NumQMatchedTop2"] = ak.values_astype(jets.delta_r(qs_3) < 0.4, np.int32) 
+    jets["NumQMatchedTop2"] = ak.values_astype(jets.delta_r(qs_3) < 0.4, np.int32)
 
     num_jets = 6
     JetVars = {
         f"ak4{var}": pad_val(jets[var], num_jets, axis=1)
         for var in [
-            #"TopMatch",
-            #"TopMatchIndex",
+            # "TopMatch",
+            # "TopMatchIndex",
             "NumBMatchedTop1",
             "NumBMatchedTop2",
             "NumQMatchedTop1",
@@ -214,14 +225,12 @@ def gen_selection_Top_semi(
         ]
     }
 
-    MuonVars = {
+    MuonVars = {  # noqa: F841
         f"muons{var}": pad_val(muons[var], num_lep, axis=1)
         for var in [
             "NumlMatchedTop1",
         ]
     }
-
-
 
     return {**GenTopVars, **JetVars, **EleVars}
 

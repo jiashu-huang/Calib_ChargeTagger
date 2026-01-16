@@ -689,9 +689,7 @@ class bbtautauSkimmer(SkimmerABC):
             add_selection("ak8_bb_preselection", cut_bb, *selection_args)
 
         if self._prescale_factor:
-            cut_prescale = (
-                events.event % self._prescale_factor == 0
-            )
+            cut_prescale = events.event % self._prescale_factor == 0
             add_selection("prescale", cut_prescale, *selection_args)
 
         print("Selection", f"{time.time() - start:.2f}")

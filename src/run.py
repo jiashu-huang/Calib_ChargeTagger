@@ -28,7 +28,7 @@ def get_processor(
 ):
     # define processor
     if processor == "skimmer":
-        from bbtautau.processors import ttSkimmer
+        from processors import ttSkimmer
 
         return ttSkimmer(
             xsecs=xsecs,
