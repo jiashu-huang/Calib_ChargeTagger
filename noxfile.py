@@ -1,10 +1,13 @@
+"""Define Nox sessions for linting, tests, docs, API docs, and packaging.
+
+Touches the project source under `src/bbtautau`, docs under `docs/`, and build
+artifacts under `build/` and `docs/_build/`. Depends on Nox plus tools installed
+per session (pre-commit, pylint, pytest, sphinx(+autobuild), sphinx-apidoc,
+build).
+"""
+
 from __future__ import annotations
 
-# Summary: Defines Nox sessions for linting, pylint, tests, docs, API docs, and
-# packaging. Touches the project source under `src/bbtautau`, docs under `docs/`,
-# and build artifacts under `build/` and `docs/_build/`. Depends on Nox plus
-# tools installed per session (pre-commit, pylint, pytest, sphinx(+autobuild),
-# sphinx-apidoc, build).
 import argparse
 import shutil
 from pathlib import Path
