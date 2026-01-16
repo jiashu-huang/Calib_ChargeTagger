@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+# Summary: Defines Nox sessions for linting, pylint, tests, docs, API docs, and
+# packaging. Touches the project source under `src/bbtautau`, docs under `docs/`,
+# and build artifacts under `build/` and `docs/_build/`. Depends on Nox plus
+# tools installed per session (pre-commit, pylint, pytest, sphinx(+autobuild),
+# sphinx-apidoc, build).
 import argparse
 import shutil
 from pathlib import Path
 
 import nox
 
-DIR = Path(__file__).parent.resolve()
+DIR: Path = Path(__file__).parent.resolve()
 
 nox.needs_version = ">=2024.3.2"
 nox.options.sessions = ["lint", "pylint", "tests"]
@@ -51,12 +56,14 @@ def docs(session: nox.Session) -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("-b", dest="builder", default="html", help="Build target (default: html)")
     parser.add_argument("output", nargs="?", help="Output directory")
-    args, posargs = parser.parse_known_args(session.posargs)
-    serve = args.builder == "html" and session.interactive
+    args: argparse.Namespace
+    posargs: list[str]
+    args, posargs = parser.parse_known_args(list(session.posargs))
+    serve: bool = args.builder == "html" and session.interactive
 
     session.install("-e.[docs]", "sphinx-autobuild")
 
-    shared_args = (
+    shared_args: tuple[str, ...] = (
         "-n",  # nitpicky mode
         "-T",  # full tracebacks
         f"-b={args.builder}",
@@ -95,7 +102,7 @@ def build(session: nox.Session) -> None:
     Build an SDist and wheel.
     """
 
-    build_path = DIR.joinpath("build")
+    build_path: Path = DIR.joinpath("build")
     if build_path.exists():
         shutil.rmtree(build_path)
 
