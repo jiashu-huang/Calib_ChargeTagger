@@ -6,7 +6,7 @@ per session (pre-commit, pylint, pytest, sphinx(+autobuild), sphinx-apidoc,
 build).
 """
 
-from __future__ import annotations
+from __future__ import annotations  # A blank line is required after __future__ imports
 
 import argparse
 import shutil
