@@ -214,3 +214,31 @@ eventVars["nBJets"] = ak.num(
 ```
 
 This works, so I am gonna push it up to GitHub.
+
+## 2025-01-17
+
+Now try:
+```bash
+python src/run.py \
+  --processor skimmer \
+  --year 2022EE \
+  --files /home/jhuan166/Vcb/CMSSW_15_1_0_patch4/output/315d7993-98ba-431b-8fb5-8835abca47cb_CMSSW_15_CHARGE_NanoAOD.root \
+  --files-name TTtoLplusNu2Q-2Jets_TuneCP5_13p6TeV_amcatnloFXFX-pythia8 \
+  --file-tag TT1L2Q \
+  --save-root
+```
+
+File is now saved at `/home/jhuan166/Vcb/Calib_ChargeTagger/nano_skim_TT1L2Q_batch_0.root`.
+
+Turns out it is no different than the old file. Using `--file-tag TT1L2Q` is not working exactly as intended?
+
+Try
+```bash
+python src/run.py \
+  --processor skimmer \
+  --year 2022EE \
+  --files /home/jhuan166/Vcb/CMSSW_15_1_0_patch4/output/315d7993-98ba-431b-8fb5-8835abca47cb_CMSSW_15_CHARGE_NanoAOD.root \
+  --files-name TT1L2Q \
+  --file-tag TT1L2Q \
+  --save-root
+```
