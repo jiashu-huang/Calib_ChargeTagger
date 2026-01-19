@@ -158,10 +158,20 @@ def gen_selection_Top_semi(
         **{f"GenTopW1{key}": wboson_1[var].to_numpy() for (var, key) in skim_vars.items()},
     }
 
-    wboson_daughters = ak.flatten(daughters[(daughters_pdgId == W_PDGID)].distinctChildren, axis=2)
-    wboson_daughters = wboson_daughters[
-        wboson_daughters.hasFlags(["fromHardProcess", "isLastCopy"])
-    ]
+    wbosons = daughters[(daughters_pdgId == W_PDGID)]
+    wboson_children = wbosons.distinctChildren
+    wboson_children = wboson_children[wboson_children.hasFlags(["fromHardProcess", "isLastCopy"])]
+    wboson_children_pdgId = abs(wboson_children.pdgId)
+
+    w_has_b = ak.any(wboson_children_pdgId == 5, axis=2)
+    w_has_c = ak.any(wboson_children_pdgId == 4, axis=2)
+    w_bc_mask = w_has_b & w_has_c
+    w_to_bc = ak.any(w_bc_mask, axis=1)
+
+    w_bc_children = wboson_children[w_bc_mask]
+    w_bc_b = ak.flatten(w_bc_children[abs(w_bc_children.pdgId) == 5], axis=2)
+
+    wboson_daughters = ak.flatten(wboson_children, axis=2)
     wboson_daughters_pdgId = abs(wboson_daughters.pdgId)
 
     bquark = daughters[(daughters_pdgId == 5)]
@@ -193,6 +203,25 @@ def gen_selection_Top_semi(
     qs_3 = ak.firsts(quark_daughters[:, 1:2])
     bs_0 = ak.firsts(bquark[:, 0:1])
     bs_1 = ak.firsts(bquark[:, 1:2])
+
+    GenTopBVars = {
+        **{f"GenTopB0{key}": bs_0[var].to_numpy() for (var, key) in skim_vars.items()},
+        **{f"GenTopB1{key}": bs_1[var].to_numpy() for (var, key) in skim_vars.items()},
+    }
+    GenWbcVars = {
+        **{
+            f"GenWb{key}": pad_val(w_bc_b[var], 1, axis=1)[:, 0]
+            for (var, key) in skim_vars.items()
+        },
+        "GenWtoBC": w_to_bc.to_numpy(),
+    }
+
+    GenQVars = {
+        **{f"GenQ1{key}": qs_2[var].to_numpy() for (var, key) in skim_vars.items()},
+        **{f"GenQ2{key}": qs_3[var].to_numpy() for (var, key) in skim_vars.items()},
+        "GenQ1PdgId": qs_2.pdgId.to_numpy(),
+        "GenQ2PdgId": qs_3.pdgId.to_numpy(),
+    }
 
     # fatjets["TopMatch"] = is_fatjet_matched
     # fatjets["TopMatchIndex"] = ak.mask(
@@ -232,7 +261,7 @@ def gen_selection_Top_semi(
         ]
     }
 
-    return {**GenTopVars, **JetVars, **EleVars}
+    return {**GenTopVars, **JetVars, **EleVars, **GenTopBVars, **GenWbcVars, **GenQVars}
 
 
 def gen_selection_HHbbtautau(

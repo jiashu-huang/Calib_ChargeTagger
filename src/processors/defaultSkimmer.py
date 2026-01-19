@@ -1,7 +1,8 @@
 """
-Skimmer for Vcb analysis.
+Default skimmer for Vcb analysis.
+Preserves all NanoAOD fields and appends derived variables from ttSkimmer.
 
-Author: Jiashu Huang (Brown U)
+Author(s): Jiashu Huang (Brown U)
 """
 
 from __future__ import annotations
@@ -48,10 +49,10 @@ logger.setLevel(logging.INFO)
 package_path = str(pathlib.Path(__file__).parent.parent.resolve())
 
 
-class ttSkimmer(SkimmerABC):
+class defaultSkimmer(SkimmerABC):
     """
-    Skims nanoaod files, saving selected branches and events passing preselection cuts
-    (and triggers for data).
+    Skims nanoaod files while preserving all original branches and adding
+    derived variables (and triggers for data).
     """
 
     # name in nano files: name in the skimmed output
@@ -59,16 +60,7 @@ class ttSkimmer(SkimmerABC):
         "Jet": {
             **P4,
             "rawFactor": "rawFactor",
-            "btagDeepFlavB": "btagDeepFlavB",
-            "btagDeepFlavCvB": "btagDeepFlavCvB",
-            "btagDeepFlavCvL": "btagDeepFlavCvL",
-            "btagDeepFlavQG": "btagDeepFlavQG",
             "btagPNetB": "btagPNetB",  # RobustPrT and chargetagger
-            "btagPNetCvB": "btagPNetCvB",
-            "btagPNetCvL": "btagPNetCvL",
-            "btagPNetCvNotB": "btagPNetCvNotB",
-            "btagPNetQvG": "btagPNetQvG",
-            "btagPNetTauVJet": "btagPNetTauVJet",
             "ParTPosvsAll": "ParTPosvsAll",
             "ParTNegvsAll": "ParTNegvsAll",
             "ParTPosvsNeg": "ParTPosvsNeg",
@@ -196,6 +188,64 @@ class ttSkimmer(SkimmerABC):
     @property
     def accumulator(self):
         return self._accumulator
+
+    @staticmethod
+    def _infer_pad_value(array) -> float | int | bool | str:
+        ak_type = str(ak.type(array)).lower()
+        if "bool" in ak_type:
+            return False
+        if "string" in ak_type:
+            return ""
+        return PAD_VAL
+
+    @staticmethod
+    def _try_counts(array):
+        try:
+            return ak.num(array, axis=1)
+        except Exception:
+            return None
+
+    @staticmethod
+    def _max_len(counts) -> int:
+        if counts is None or len(counts) == 0:
+            return 0
+        max_len = ak.max(counts)
+        return int(max_len) if max_len is not None else 0
+
+    def _pad_jagged(self, array, max_len: int) -> np.ndarray:
+        pad_value = self._infer_pad_value(array)
+        return pad_val(array, max_len, pad_value, axis=1)
+
+    def _extract_all_fields(self, events: ak.Array) -> dict[str, np.ndarray]:
+        all_vars: dict[str, np.ndarray] = {}
+        for field in events.fields:
+            array = events[field]
+            record_fields = ak.fields(array)
+            if record_fields:
+                counts = self._try_counts(array)
+                if counts is None:
+                    for subfield in record_fields:
+                        subarray = array[subfield]
+                        pad_value = self._infer_pad_value(subarray)
+                        filled = ak.fill_none(subarray, pad_value)
+                        all_vars[f"{field}_{subfield}"] = ak.to_numpy(filled)
+                else:
+                    max_len = self._max_len(counts)
+                    for subfield in record_fields:
+                        subarray = array[subfield]
+                        all_vars[f"{field}_{subfield}"] = self._pad_jagged(
+                            subarray, max_len
+                        )
+            else:
+                counts = self._try_counts(array)
+                if counts is None:
+                    pad_value = self._infer_pad_value(array)
+                    filled = ak.fill_none(array, pad_value)
+                    all_vars[field] = ak.to_numpy(filled)
+                else:
+                    max_len = self._max_len(counts)
+                    all_vars[field] = self._pad_jagged(array, max_len)
+        return all_vars
 
     def process(self, events: ak.Array):
         """Runs event processor for different types of jets"""
@@ -488,7 +538,7 @@ class ttSkimmer(SkimmerABC):
         #                         vbf_jets[shift][vari][var], 2, axis=1
         #                     )
 
-        skimmed_events = {
+        derived_events = {
             **genVars,
             **eventVars,
             **pileupVars,
@@ -501,6 +551,9 @@ class ttSkimmer(SkimmerABC):
             # **bbFatJetVars,
             # **trigObjFatJetVars,
         }
+
+        inputVars = self._extract_all_fields(events)
+        skimmed_events = {**inputVars, **derived_events}
 
         # if self._region == "signal":
         #     bdtVars = self.getBDT(bbFatJetVars, vbfJetVars, ak4JetAwayVars, met_pt, "")

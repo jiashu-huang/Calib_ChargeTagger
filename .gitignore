@@ -197,3 +197,7 @@ data/.sites_map.json
 
 # Ignore output txt
 num_batches_*.txt
+
+# Ignore custom txt and csv
+*_0th_event.txt
+*_fields.csv
