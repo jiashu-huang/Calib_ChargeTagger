@@ -48,7 +48,7 @@ logger.setLevel(logging.INFO)
 package_path = str(pathlib.Path(__file__).parent.parent.resolve())
 
 
-class ttSkimmer(SkimmerABC):
+class vcbSkimmer(SkimmerABC):
     """
     Skims nanoaod files, saving selected branches and events passing preselection cuts
     (and triggers for data).

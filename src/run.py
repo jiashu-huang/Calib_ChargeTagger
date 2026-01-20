@@ -1,21 +1,88 @@
 """
 Runs coffea processors on the LPC via either condor or dask.
 
-Author(s): Cristina Mantilla Suarez, Raghav Kansal
+Author: Jiashu Huang
+Date: Jan 2025
+
+Usage:
+python src/run.py \
+  --processor skimmer \
+  --skimmer vcbSkimmer \
+  --year 2022EE \
+  --files /home/jhuan166/Vcb/CMSSW_15_1_0_patch4/output/315d7993-98ba-431b-8fb5-8835abca47cb_CMSSW_15_CHARGE_NanoAOD.root \
+  --files-name TT1L2Q \
+  --file-tag TT1L2Q \
+  --save-root
 """
 
 from __future__ import annotations
 
 import argparse
 import importlib
+import inspect
 from pathlib import Path
 
 import yaml
 from boostedhh import run_utils
 from boostedhh.hh_vars import DATA_SAMPLES
+from boostedhh.processors import SkimmerABC
 from boostedhh.xsecs import xsecs
 
 from bbtautau import bbtautau_utils
+
+
+def _parse_skimmer_arg(skimmer: str | None) -> tuple[str, str | None]:
+    if not skimmer:
+        return "ttSkimmer", None
+
+    class_name = None
+    module_part = skimmer
+    if ":" in skimmer:
+        module_part, class_name = skimmer.split(":", 1)
+        class_name = class_name.strip() or None
+
+    raw_name = Path(module_part).name
+    if raw_name.endswith(".py"):
+        raw_name = raw_name[:-3]
+    module_name = raw_name.split(".")[-1]
+
+    return module_name, class_name
+
+
+def _select_skimmer_class(
+    skimmer_module, module_name: str, class_name: str | None
+) -> type[SkimmerABC]:
+    if class_name:
+        try:
+            return getattr(skimmer_module, class_name)
+        except AttributeError as exc:
+            raise ValueError(
+                f"Skimmer class {class_name} not found in processors.{module_name}"
+            ) from exc
+
+    if hasattr(skimmer_module, module_name):
+        return getattr(skimmer_module, module_name)
+
+    candidates = []
+    for _, obj in vars(skimmer_module).items():
+        if (
+            inspect.isclass(obj)
+            and issubclass(obj, SkimmerABC)
+            and obj is not SkimmerABC
+            and obj.__module__ == skimmer_module.__name__
+        ):
+            candidates.append(obj)
+
+    if len(candidates) == 1:
+        return candidates[0]
+    if len(candidates) > 1:
+        options = ", ".join(sorted(cls.__name__ for cls in candidates))
+        raise ValueError(
+            "Multiple skimmer classes found in processors."
+            f"{module_name}: {options}. Use --skimmer module:Class to select one."
+        )
+
+    raise ValueError(f"No SkimmerABC subclass found in processors.{module_name}")
 
 
 def get_processor(
@@ -30,20 +97,9 @@ def get_processor(
 ):
     # define processor
     if processor == "skimmer":
-        if skimmer is None:
-            skimmer_name = "ttSkimmer"
-        else:
-            raw_name = Path(skimmer).name
-            if raw_name.endswith(".py"):
-                raw_name = raw_name[:-3]
-            skimmer_name = raw_name.split(".")[-1]
+        skimmer_name, class_name = _parse_skimmer_arg(skimmer)
         skimmer_module = importlib.import_module(f"processors.{skimmer_name}")
-        try:
-            skimmer_cls = getattr(skimmer_module, skimmer_name)
-        except AttributeError as exc:
-            raise ValueError(
-                f"Skimmer {skimmer_name} not found in processors.{skimmer_name}"
-            ) from exc
+        skimmer_cls = _select_skimmer_class(skimmer_module, skimmer_name, class_name)
 
         return skimmer_cls(
             xsecs=xsecs,
@@ -133,7 +189,10 @@ if __name__ == "__main__":
         "--skimmer",
         type=str,
         default="ttSkimmer",
-        help="Skimmer class/module name in src/processors (e.g., ttSkimmer, vcbSkimmer).",
+        help=(
+            "Skimmer module name in src/processors, optionally with class name "
+            "(e.g., ttSkimmer, vcbSkimmer.py, vcbSkimmer:ttSkimmer)."
+        ),
     )
     args = parser.parse_args()
 
