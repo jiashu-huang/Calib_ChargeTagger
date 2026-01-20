@@ -7,6 +7,7 @@ Author(s): Cristina Mantilla Suarez, Raghav Kansal
 from __future__ import annotations
 
 import argparse
+import importlib
 from pathlib import Path
 
 import yaml
@@ -25,12 +26,26 @@ def get_processor(
     fatjet_pt_cut: float | None = None,
     fatjet_bb_preselection: bool | None = None,
     prescale_factor: int | None = None,
+    skimmer: str | None = None,
 ):
     # define processor
     if processor == "skimmer":
-        from processors import ttSkimmer
+        if skimmer is None:
+            skimmer_name = "ttSkimmer"
+        else:
+            raw_name = Path(skimmer).name
+            if raw_name.endswith(".py"):
+                raw_name = raw_name[:-3]
+            skimmer_name = raw_name.split(".")[-1]
+        skimmer_module = importlib.import_module(f"processors.{skimmer_name}")
+        try:
+            skimmer_cls = getattr(skimmer_module, skimmer_name)
+        except AttributeError as exc:
+            raise ValueError(
+                f"Skimmer {skimmer_name} not found in processors.{skimmer_name}"
+            ) from exc
 
-        return ttSkimmer(
+        return skimmer_cls(
             xsecs=xsecs,
             save_systematics=save_systematics,
             region=region,
@@ -50,6 +65,7 @@ def main(args):
         args.fatjet_pt_cut,
         args.fatjet_bb_preselection,
         args.prescale_factor,
+        args.skimmer,
     )
 
     save_parquet = {"skimmer": True}[args.processor]
@@ -113,6 +129,12 @@ if __name__ == "__main__":
     run_utils.parse_common_run_args(parser)
     run_utils.parse_common_hh_args(parser)
     bbtautau_utils.parse_common_run_args(parser)
+    parser.add_argument(
+        "--skimmer",
+        type=str,
+        default="ttSkimmer",
+        help="Skimmer class/module name in src/processors (e.g., ttSkimmer, vcbSkimmer).",
+    )
     args = parser.parse_args()
 
     if isinstance(args.year, list):
