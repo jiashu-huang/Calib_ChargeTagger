@@ -85,6 +85,23 @@ def _select_skimmer_class(
     raise ValueError(f"No SkimmerABC subclass found in processors.{module_name}")
 
 
+def _print_local_outputs(filetag: str, save_parquet: bool, save_root: bool) -> None:
+    print("\n\nSaved outputs:")
+    print(f"  pickle: {Path('outfiles') / f'{filetag}.pkl'}")
+    if save_parquet:
+        print(f"  parquet: {Path().resolve() / f'out_{filetag}_batch_*.parquet'}")
+    if save_root:
+        print(f"  root: {Path().resolve() / f'nano_skim_{filetag}_batch_*.root'}")
+
+
+def _print_dask_outputs(samples: list[str], year: str) -> None:
+    outdir = Path().resolve() / "outparquet_dask"
+    print("\n\nSaved outputs:")
+    for sample in samples:
+        print(f"  parquet: {outdir / f'{year}_dask_{sample}.parquet'}")
+        print(f"  pickle: {outdir / f'{year}_dask_{sample}.pkl'}")
+
+
 def get_processor(
     processor: str,
     save_systematics: bool | None = None,
@@ -128,6 +145,7 @@ def main(args):
     save_root = {"skimmer": True}[args.processor]
 
     skipbadfiles = True
+    filetag = f"{args.starti}-{args.endi}" if args.file_tag is None else args.file_tag
 
     if len(args.files):
         fileset = {f"{args.year}_{args.files_name}": args.files}
@@ -166,6 +184,7 @@ def main(args):
     print(f"Running on fileset {fileset}")
     if args.executor == "dask":
         run_utils.run_dask(p, fileset, args)
+        _print_dask_outputs(list(fileset.keys()), args.year)
     else:
         run_utils.run(
             p,
@@ -175,9 +194,10 @@ def main(args):
             skipbadfiles=skipbadfiles,
             save_parquet=save_parquet,
             save_root=save_root and args.save_root,
-            filetag=f"{args.starti}-{args.endi}" if args.file_tag is None else args.file_tag,
+            filetag=filetag,
             batch_size=args.batch_size,
         )
+        _print_local_outputs(filetag, save_parquet, save_root and args.save_root)
 
 
 if __name__ == "__main__":

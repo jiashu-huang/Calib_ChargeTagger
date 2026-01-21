@@ -20,6 +20,10 @@
 - Skimmed branch content includes lepton/jet kinematics and charge-tagger variables such as
   `ParTPosvsAll`, `ParTNegvsAll`, `ParTPosvsNeg`, `PflavCharge`, `FlavSplit`, and `btagRobustParTAK4B`,
   along with event IDs, pileup, HLT bits, and per-event weights.
+- Gen-level masses saved by `GenSelection.py` (e.g., `GenTopMass`) come directly from the NanoAOD
+  `GenPart.mass` branch (`GenPart_mass` in the input ROOT file), so they can vary event-by-event.
+  b-quark masses are not saved by default; if needed, you can mirror the same pattern with
+  `GenPart.mass` (noting some generators store b parton mass as 0) or replace with a fixed PDG mass.
 - Supports local/dask execution and Condor submission via `src/condor/submit.py`.
 - Postprocessing utilities for template production, sensitivity studies, BDT training, and combine workflows.
 - Depends on the `boostedhh` utilities (submodule) for run orchestration and common corrections.

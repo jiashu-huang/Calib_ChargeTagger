@@ -149,75 +149,104 @@ def gen_selection_Top_semi(
     selection_args: list,  # noqa: ARG001
     skim_vars: dict,
 ):
+    """Gen-level semileptonic top selection and matching helpers."""
 
-    # finding tops
-    tops = events.GenPart[
-        (abs(events.GenPart.pdgId) == TOP_PDGID) * events.GenPart.hasFlags(GEN_FLAGS)
-    ]
+    genparts = events.GenPart
+    abs_pdg = abs(genparts.pdgId)
+    hard_last = genparts.hasFlags(GEN_FLAGS)
+    idx = ak.local_index(genparts, axis=1)
+    mother_idx = genparts.genPartIdxMother
+
+    def _first_from_mask(mask):
+        return ak.firsts(genparts[mask][:, 0:1])
+
+    def _first_idx(mask):
+        return ak.firsts(idx[mask][:, 0:1])
+
+    def _child_mask(parent_idx):
+        return (mother_idx == parent_idx) & (parent_idx >= 0)
+
+    # Select the hard-process, last-copy tops and cache their kinematics.
+    top_mask = (abs_pdg == TOP_PDGID) & hard_last
+    tops = genparts[top_mask]
     GenTopVars = {f"GenTop{key}": tops[var].to_numpy() for (var, key) in skim_vars.items()}
 
-    daughters = ak.flatten(tops.distinctChildren, axis=2)
-    daughters = daughters[daughters.hasFlags(["fromHardProcess", "isLastCopy"])]
-    daughters_pdgId = abs(daughters.pdgId)
+    # Keep top indices in the original GenPart array to query their daughters.
+    top_idx = ak.pad_none(idx[top_mask], 2, axis=1)
+    top0_idx = ak.fill_none(top_idx[:, 0], -1)
+    top1_idx = ak.fill_none(top_idx[:, 1], -1)
 
-    wboson_0 = ak.firsts(daughters[(daughters_pdgId == W_PDGID)][:, 0:1])
-    wboson_1 = ak.firsts(daughters[(daughters_pdgId == W_PDGID)][:, 1:2])
+    top0_child_mask = _child_mask(top0_idx) & hard_last
+    top1_child_mask = _child_mask(top1_idx) & hard_last
+
+    # W and b directly from each top.
+    w0_mask = top0_child_mask & (abs_pdg == W_PDGID)
+    w1_mask = top1_child_mask & (abs_pdg == W_PDGID)
+    b0_mask = top0_child_mask & (abs_pdg == 5)
+    b1_mask = top1_child_mask & (abs_pdg == 5)
+
+    wboson_0 = _first_from_mask(w0_mask)
+    wboson_1 = _first_from_mask(w1_mask)
     GenTopVars = {
         **GenTopVars,
         **{f"GenTopW0{key}": wboson_0[var].to_numpy() for (var, key) in skim_vars.items()},
         **{f"GenTopW1{key}": wboson_1[var].to_numpy() for (var, key) in skim_vars.items()},
     }
 
-    wbosons = daughters[(daughters_pdgId == W_PDGID)]
-    wboson_children = wbosons.distinctChildren
-    wboson_children = wboson_children[wboson_children.hasFlags(["fromHardProcess", "isLastCopy"])]
-    wboson_children_pdgId = abs(wboson_children.pdgId)
+    bs_0 = _first_from_mask(b0_mask)
+    bs_1 = _first_from_mask(b1_mask)
 
-    w_has_b = ak.any(wboson_children_pdgId == 5, axis=2)
-    w_has_c = ak.any(wboson_children_pdgId == 4, axis=2)
-    w_bc_mask = w_has_b & w_has_c
-    w_to_bc = ak.any(w_bc_mask, axis=1)
+    # Resolve W indices to find their children directly from genPartIdxMother.
+    w0_idx = ak.fill_none(_first_idx(w0_mask), -1)
+    w1_idx = ak.fill_none(_first_idx(w1_mask), -1)
+    w0_children = genparts[_child_mask(w0_idx) & hard_last]
+    w1_children = genparts[_child_mask(w1_idx) & hard_last]
+    w_children = ak.concatenate([w0_children, w1_children], axis=1)
+    w_children_pdg = abs(w_children.pdgId)
 
-    w_bc_children = wboson_children[w_bc_mask]
-    w_bc_b = ak.flatten(w_bc_children[abs(w_bc_children.pdgId) == 5], axis=2)
+    # Check if any W->bc decay happens (both b and c among W children).
+    w0_has_b = ak.any(abs(w0_children.pdgId) == 5, axis=1)
+    w0_has_c = ak.any(abs(w0_children.pdgId) == 4, axis=1)
+    w1_has_b = ak.any(abs(w1_children.pdgId) == 5, axis=1)
+    w1_has_c = ak.any(abs(w1_children.pdgId) == 4, axis=1)
+    w0_bc = w0_has_b & w0_has_c
+    w1_bc = w1_has_b & w1_has_c
+    w_to_bc = w0_bc | w1_bc
 
-    wboson_daughters = ak.flatten(wboson_children, axis=2)
-    wboson_daughters_pdgId = abs(wboson_daughters.pdgId)
+    w0_bc_evt, w0_child_pdg = ak.broadcast_arrays(w0_bc, w0_children.pdgId)
+    w1_bc_evt, w1_child_pdg = ak.broadcast_arrays(w1_bc, w1_children.pdgId)
+    w0_bc_b = w0_children[(abs(w0_child_pdg) == 5) & w0_bc_evt]
+    w1_bc_b = w1_children[(abs(w1_child_pdg) == 5) & w1_bc_evt]
+    w_bc_b = ak.concatenate([w0_bc_b, w1_bc_b], axis=1)
 
-    bquark = daughters[(daughters_pdgId == 5)]
     # matched_to_top = fatjets.metric_table(tops) < 0.8
     # is_fatjet_matched = ak.any(matched_to_top, axis=2)
 
-    # lepdecay = wboson_daughters[(wboson_daughters_pdgId == 13) or (wboson_daughters_pdgId ==11 ) ]
-
-    lep_mask = (wboson_daughters_pdgId == 11) | (wboson_daughters_pdgId == 13)
+    # Identify leptons and leptons+neutrinos from W decays.
+    lep_mask = (w_children_pdg == 11) | (w_children_pdg == 13)
     lep_nu_mask = (
-        (wboson_daughters_pdgId == 11)
-        | (wboson_daughters_pdgId == 13)
-        | (wboson_daughters_pdgId == 12)
-        | (wboson_daughters_pdgId == 14)
+        (w_children_pdg == 11)
+        | (w_children_pdg == 13)
+        | (w_children_pdg == 12)
+        | (w_children_pdg == 14)
     )
-    lepdecay = wboson_daughters[lep_mask]
+    # Pick the first lepton from W daughters for dR matching.
+    lepdecay = w_children[lep_mask]
     ls_0 = ak.firsts(lepdecay[:, 0:1])  # first lepton per event/top
-    #    all_local_indices = ak.local_index(wboson_daughters, axis =1)
-    print(lep_mask)
-    print(lep_nu_mask)
-    # lep_indices = all_local_indices[lep_mask]
-    # print(lep_indices)
-
+    # Use the complement of lepton+neutrino mask as quark-like children.
     non_lep_nu_mask = ~lep_nu_mask
 
-    quark_daughters = wboson_daughters[non_lep_nu_mask]
-    print(quark_daughters)
+    # Select the first two quark daughters from the W for matching.
+    quark_daughters = w_children[non_lep_nu_mask]
     qs_2 = ak.firsts(quark_daughters[:, 0:1])
     qs_3 = ak.firsts(quark_daughters[:, 1:2])
-    bs_0 = ak.firsts(bquark[:, 0:1])
-    bs_1 = ak.firsts(bquark[:, 1:2])
 
+    # Store per-top b-quark kinematics (pad in the caller if needed).
     GenTopBVars = {
         **{f"GenTopB0{key}": bs_0[var].to_numpy() for (var, key) in skim_vars.items()},
         **{f"GenTopB1{key}": bs_1[var].to_numpy() for (var, key) in skim_vars.items()},
     }
+    # Store W->bc b-quark kinematics and a flag indicating W->bc.
     GenWbcVars = {
         **{
             f"GenWb{key}": pad_val(w_bc_b[var], 1, axis=1)[:, 0] for (var, key) in skim_vars.items()
@@ -225,6 +254,7 @@ def gen_selection_Top_semi(
         "GenWtoBC": w_to_bc.to_numpy(),
     }
 
+    # Store quark daughters from W (pdgId kept explicitly for flavor info).
     GenQVars = {
         **{f"GenQ1{key}": qs_2[var].to_numpy() for (var, key) in skim_vars.items()},
         **{f"GenQ2{key}": qs_3[var].to_numpy() for (var, key) in skim_vars.items()},
@@ -236,6 +266,7 @@ def gen_selection_Top_semi(
     # fatjets["TopMatchIndex"] = ak.mask(
     #    ak.argmin(fatjets.metric_table(tops), axis=2), fatjets["TopMatch"] == 1
     # )
+    # Count gen-object matches within dR cones for jets and leptons.
     jets["NumBMatchedTop1"] = ak.values_astype(jets.delta_r(bs_0) < 0.4, np.int32)
     jets["NumBMatchedTop2"] = ak.values_astype(jets.delta_r(bs_1) < 0.4, np.int32)
     electrons["NumlMatchedTop1"] = ak.values_astype(electrons.delta_r(ls_0) < 0.2, np.int32)
@@ -243,6 +274,7 @@ def gen_selection_Top_semi(
     jets["NumQMatchedTop1"] = ak.values_astype(jets.delta_r(qs_2) < 0.4, np.int32)
     jets["NumQMatchedTop2"] = ak.values_astype(jets.delta_r(qs_3) < 0.4, np.int32)
 
+    # Pad jet/lepton match counts into fixed-length arrays for skimming.
     num_jets = 6
     JetVars = {
         f"ak4{var}": pad_val(jets[var], num_jets, axis=1)
@@ -263,6 +295,7 @@ def gen_selection_Top_semi(
         ]
     }
 
+    # Same padding for muons (kept in the output dict via returned vars).
     MuonVars = {  # noqa: F841
         f"muons{var}": pad_val(muons[var], num_lep, axis=1)
         for var in [

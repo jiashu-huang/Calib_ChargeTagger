@@ -250,3 +250,11 @@ The command that works currently is
 ```bash
 python src/run.py   --processor skimmer   --skimmer vcbSkimmer   --year 2022EE   --files /home/jhuan166/Vcb/CMSSW_15_1_0_patch4/output/315d7993-98ba-431b-8fb5-8835abca47cb_CMSSW_15_CHARGE_NanoAOD.root   --files-name TT1L2Q   --file-tag TT1L2Q   --save-root
 ```
+
+### 2025-01-20
+
+The goal today is to make sure good gen-level information is passed into the file.
+
+Turns out that gen-level info is being loaded into the file quite all right. B mass is missing because it's just not being registered by the generator! I think a suitable substitute is the PDG mass.
+
+Let's plot out a histogram of the gen-level top mass and W mass.
