@@ -2,6 +2,7 @@
 Gen selection functions for skimmer.
 
 Author(s): Raghav Kansal
+Modified by J. Huang, Jan 2026
 """
 
 from __future__ import annotations
@@ -51,6 +52,14 @@ def _sum_taus(taut):
     return ak.sum(taut, axis=1)
 
 
+################################################################################
+#
+# ADD YOUR GEN SELECTION FUNCTIONS BELOW
+#
+################################################################################
+
+
+### For ttSkimmer
 def gen_selection_Top(
     events: NanoEventsArray,
     jets: JetArray,  # noqa: ARG001
@@ -131,6 +140,7 @@ def gen_selection_Top(
     return {**GenTopVars, **FatJetVars}
 
 
+### For vcbSkimmer (J. Huang, Jan 2026)
 def gen_selection_Top_semi(
     events: NanoEventsArray,
     jets: JetArray,
@@ -210,8 +220,7 @@ def gen_selection_Top_semi(
     }
     GenWbcVars = {
         **{
-            f"GenWb{key}": pad_val(w_bc_b[var], 1, axis=1)[:, 0]
-            for (var, key) in skim_vars.items()
+            f"GenWb{key}": pad_val(w_bc_b[var], 1, axis=1)[:, 0] for (var, key) in skim_vars.items()
         },
         "GenWtoBC": w_to_bc.to_numpy(),
     }
@@ -264,6 +273,7 @@ def gen_selection_Top_semi(
     return {**GenTopVars, **JetVars, **EleVars, **GenTopBVars, **GenWbcVars, **GenQVars}
 
 
+### For bbtautauSkimmer
 def gen_selection_HHbbtautau(
     events: NanoEventsArray,
     fatjets: FatJetArray,  # noqa: ARG001
@@ -343,6 +353,7 @@ def gen_selection_HHbbtautau(
     return {**GenHiggsVars, **GenbbVars, **GenTauVars}  # , **GenMatchingVars}
 
 
+### Not sure why this is needed here?
 def gen_selection_HH4b(
     events: NanoEventsArray,
     fatjets: FatJetArray,  # noqa: ARG001
