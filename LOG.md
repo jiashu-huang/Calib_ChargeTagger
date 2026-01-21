@@ -242,3 +242,11 @@ python src/run.py \
   --file-tag TT1L2Q \
   --save-root
 ```
+
+
+## 2025-01-19
+
+The command that works currently is
+```bash
+python src/run.py   --processor skimmer   --skimmer vcbSkimmer   --year 2022EE   --files /home/jhuan166/Vcb/CMSSW_15_1_0_patch4/output/315d7993-98ba-431b-8fb5-8835abca47cb_CMSSW_15_CHARGE_NanoAOD.root   --files-name TT1L2Q   --file-tag TT1L2Q   --save-root
+```
