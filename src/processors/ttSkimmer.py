@@ -277,6 +277,9 @@ class ttSkimmer(SkimmerABC):
         )
         ht = ak.sum(jets.pt, axis=1)
         print("ak4", f"{time.time() - start:.2f}")
+        # Jet veto map selection can become option-typed after later variable shaping,
+        # so evaluate it now while the jet collection is still well-formed.
+        cut_jetveto = get_jetveto_event(jets, year)
 
         # AK8 Jetsa
         """
@@ -528,7 +531,6 @@ class ttSkimmer(SkimmerABC):
         add_selection("met_filters", cut_metfilters, *selection_args)
 
         # jet veto maps
-        cut_jetveto = get_jetveto_event(jets, year)
         add_selection("ak4_jetveto", cut_jetveto, *selection_args)
 
         # # >=2 AK8 jets passing selections
