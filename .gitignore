@@ -201,3 +201,4 @@ num_batches_*.txt
 # Ignore custom txt and csv
 *_0th_event.txt
 *_fields.csv
+*run-log.txt
