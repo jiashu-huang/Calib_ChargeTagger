@@ -258,3 +258,7 @@ The goal today is to make sure good gen-level information is passed into the fil
 Turns out that gen-level info is being loaded into the file quite all right. B mass is missing because it's just not being registered by the generator! I think a suitable substitute is the PDG mass.
 
 Let's plot out a histogram of the gen-level top mass and W mass.
+
+### 2025-01-21
+
+Let's not modify things in /boostedhh/.
