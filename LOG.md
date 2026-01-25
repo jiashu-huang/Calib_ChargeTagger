@@ -250,7 +250,7 @@ For the test file, you should use `--year 2022` instead.
 New command:
 
 ```bash
-python src/run.py   --processor skimmer   --year 2022 --files /home/jhuan166/Vcb/CMSSW_15_1_0_patch4/output/315d7993-98ba-431b-8fb5-8835abca47cb_CMSSW_15_CHARGE_NanoAOD.root   --files-name TT1L2Q   --file-tag TT1L2Q   --save-root
+python src/run.py   --processor skimmer   --skimmer vcbSkimmer --year 2022 --files /home/jhuan166/Vcb/CMSSW_15_1_0_patch4/output/315d7993-98ba-431b-8fb5-8835abca47cb_CMSSW_15_CHARGE_NanoAOD.root   --files-name TT1L2Q   --file-tag TT1L2Q   --save-root
 ```
 
 Now the problem is to figure out what is happening, that the selection efficiency is less than 10%. (2700 out of 37000).

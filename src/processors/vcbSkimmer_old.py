@@ -1,59 +1,51 @@
 """
-Skimmer for Vcb analysis, based on ttSkimmer.py.
-Vcb analysis:
-    p p > t t~, (t > b W, W > c b~), (t~ > b~ W~, W~ > l- nu~)
+Skimmer for Vcb analysis.
 
 Author: Jiashu Huang (Brown U)
-
-This is a Coffea processor that reads NanoAOD events, builds physics objects,
-applies selections, computes weights, and writes a skimmed Parquet table.
 """
 
-# -----------------------------------------------------------------------------
-# Imports
-# -----------------------------------------------------------------------------
+from __future__ import annotations
 
-from __future__ import annotations  # Allow forward references in type hints.
+import logging
+import pathlib
+import time
+from collections import OrderedDict
 
-import logging  # Standard library logging for structured runtime messages.
-import pathlib  # Path utilities used to build package-relative paths.
-import time  # Simple wall-clock timing for debug prints.
-from collections import OrderedDict  # Stable ordering for cutflow bookkeeping.
-
-import awkward as ak  # Jagged-array operations for NanoAOD event data.
+import awkward as ak
 import numpy as np
-
-# The following imports are from the boostedhh submodule.
-from boostedhh import hh_vars  # Definitions for weight categories/normalization.
-from boostedhh.processors import SkimmerABC, utils  # Base skimmer + common helpers.
+from boostedhh import hh_vars
+from boostedhh.processors import SkimmerABC, utils
 from boostedhh.processors.corrections import (
-    JECs,  # Jet energy corrections factory/loader.
-    add_pileup_weight,  # Pileup reweighting for MC.
-    add_ps_weight,  # Parton shower weights for MC variations.
-    get_jetveto_event,  # Jet veto map selection per event.
-    get_pdf_weights,  # PDF variation weights.
-    get_scale_weights,  # Renormalization/factorization scale variations.
+    JECs,
+    add_pileup_weight,
+    add_ps_weight,
+    get_jetveto_event,
+    get_pdf_weights,
+    get_scale_weights,
 )
 from boostedhh.processors.utils import (
-    P4,  # Canonical 4-vector field mapping used in skim_vars.
-    PAD_VAL,  # Padding sentinel value for missing entries.
-    add_selection,  # Helper to register selections + update cutflow.
-    pad_val,  # Helper to pad jagged arrays to fixed length.
+    P4,
+    PAD_VAL,
+    add_selection,
+    pad_val,
 )
-from coffea import processor  # Coffea processor accumulator utilities.
-from coffea.analysis_tools import PackedSelection, Weights  # Selection masks + weights.
+from coffea import processor
+from coffea.analysis_tools import PackedSelection, Weights
 
-from bbtautau.HLTs import HLTs  # Trigger lists grouped by year/region.
+from bbtautau.HLTs import HLTs
 
-from . import GenSelection, objects  # Local gen selection and object definitions.
+from . import GenSelection, objects
 
-# -----------------------------------------------------------------------------
-# End Imports
-# -----------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+#
+# ------------------------------------------------------------------------------
 
 # mapping samples to the appropriate function for doing gen-level selections
+# This requires an input in src/run.py.
+# This runs "gen_selection_Top_semi" under GenSelection.py.
 gen_selection_dict = {
-    "TT1L2Q": GenSelection.gen_selection_Vcb,
+    "TT1L2Q": GenSelection.gen_selection_Top_semi,
+    # "TTdilep": GenSelection.gen_selection_TTdi,
 }
 
 logger = logging.getLogger(__name__)
@@ -68,16 +60,21 @@ class vcbSkimmer(SkimmerABC):
     (and triggers for data).
     """
 
-    # skim_vars maps NanoAOD input fields to the specific output column names the skimmer will save.
-    # Naming convention:
-    #       "name in nano files": "name in the skimmed output"
+    # name in nano files: name in the skimmed output
     skim_vars = {  # noqa: RUF012
         "Jet": {
             **P4,
             "rawFactor": "rawFactor",
+            "btagDeepFlavB": "btagDeepFlavB",
+            "btagDeepFlavCvB": "btagDeepFlavCvB",
+            "btagDeepFlavCvL": "btagDeepFlavCvL",
+            "btagDeepFlavQG": "btagDeepFlavQG",
             "btagPNetB": "btagPNetB",  # RobustPrT and chargetagger
             "btagPNetCvB": "btagPNetCvB",
             "btagPNetCvL": "btagPNetCvL",
+            "btagPNetCvNotB": "btagPNetCvNotB",
+            "btagPNetQvG": "btagPNetQvG",
+            "btagPNetTauVJet": "btagPNetTauVJet",
             "ParTPosvsAll": "ParTPosvsAll",
             "ParTNegvsAll": "ParTNegvsAll",
             "ParTPosvsNeg": "ParTPosvsNeg",
@@ -93,6 +90,14 @@ class vcbSkimmer(SkimmerABC):
             **P4,
             "charge": "charge",
         },
+        # "Tau": {
+        #     **P4,
+        #     "charge": "charge",
+        #     "idDeepTau2018v2p5VSjet": "DeepTauvsJet",
+        #     "idDeepTau2018v2p5VSmu": "DeepTauvsMu",
+        #     "idDeepTau2018v2p5VSe": "DeepTauvsE",
+        # },
+        # "GenHiggs": P4,
         "Event": {
             "run": "run",
             "event": "event",
@@ -109,19 +114,30 @@ class vcbSkimmer(SkimmerABC):
         },
     }
 
-    # bcut = 0.4319
-    # ak4_bjet_selection = {
-    #     "pt": 25,
-    #     "eta_max": 2.5,
-    #     "id": "tight",
-    #     "dr_leptons": 0.4,
-    #     "bcut": bcut,
-    # }
+    # only applied if fatjet_bb_preselection is True
+    preselection = {  # noqa: RUF012
+        # roughly, 85% signal efficiency, 2% QCD efficiency (pT: 250-400, mSD:0-250, mRegLegacy:40-250)
+        # "pnet-legacy": 0.8,
+        # "pnet-v12": 0.3,
+        # "glopart-v2": 0.3,
+        # at least 1 good iso muon or electron
+        # 2btags
+    }
 
-    # ak4_bjet_lepton_selection = {
-    #     "electron_pt": 5,
-    #     "muon_pt": 7,
-    # }
+    # This is the bjet selection inherited from Clara's default framework.
+    bcut = 0.4319
+    ak4_bjet_selection = {  # noqa: RUF012
+        "pt": 25,
+        "eta_max": 2.5,
+        "id": "tight",
+        "dr_leptons": 0.4,
+        "bcut": bcut,
+    }
+
+    ak4_bjet_lepton_selection = {  # noqa: RUF012
+        "electron_pt": 5,
+        "muon_pt": 7,
+    }
 
     def __init__(
         self,
@@ -188,6 +204,62 @@ class vcbSkimmer(SkimmerABC):
     def accumulator(self):
         return self._accumulator
 
+    def _attach_jetqk_charges(self, events: ak.Array, jets: ak.Array) -> tuple[ak.Array, dict]:
+        jetqk_fields = {}
+        # If JetQk is already part of the Jet collection, just expose it for output.
+        for field in ("QkCharge05", "QkCharge10"):
+            if field in ak.fields(jets):
+                jetqk_fields[field] = field
+
+        if len(jetqk_fields) == 2:
+            return jets, jetqk_fields
+
+        jetqk = None
+        try:
+            jetqk = events.JetQk
+        except Exception:
+            try:
+                jetqk = events["JetQk"]
+            except Exception:
+                jetqk = None
+
+        for field in ("QkCharge05", "QkCharge10"):
+            if field in jetqk_fields:
+                continue
+
+            values = None
+            if jetqk is not None and hasattr(jetqk, "fields") and field in jetqk.fields:
+                values = jetqk[field]
+            else:
+                flat_names = (f"JetQk_{field}", f"Jet_{field}")
+                for flat_name in flat_names:
+                    try:
+                        values = events[flat_name]
+                        break
+                    except Exception:
+                        values = getattr(events, flat_name, None)
+                    if values is not None:
+                        break
+
+            if values is None:
+                logger.warning(
+                    "Missing %s in input; tried JetQk.%s and %s. Skipping.",
+                    field,
+                    field,
+                    ", ".join((f"JetQk_{field}", f"Jet_{field}")),
+                )
+                continue
+
+            lengths_match = bool(ak.all(ak.num(values) == ak.num(jets)))
+            if not lengths_match:
+                logger.warning("Length mismatch for %s; skipping.", field)
+                continue
+
+            jets = ak.with_field(jets, values, field)
+            jetqk_fields[field] = field
+
+        return jets, jetqk_fields
+
     def process(self, events: ak.Array):
         """Runs event processor for different types of jets"""
 
@@ -196,8 +268,6 @@ class vcbSkimmer(SkimmerABC):
 
         year = events.metadata["dataset"].split("_")[0]
         dataset = "_".join(events.metadata["dataset"].split("_")[1:])
-
-        # isData is defined by the absence of genWeight.
         isData = not hasattr(events, "genWeight")
 
         # datasets for saving jec variations
@@ -260,6 +330,7 @@ class vcbSkimmer(SkimmerABC):
             dataset=dataset,
             nano_version=self._nano_version,
         )
+        jets, jetqk_skimvars = self._attach_jetqk_charges(events, jets)
 
         if JEC_loader.met_factory is not None:
             met = JEC_loader.met_factory.build(events.PFMET, jets, {}) if isData else events.PFMET
@@ -319,12 +390,12 @@ class vcbSkimmer(SkimmerABC):
             sort_by="nearest",
         )
         """
-        # ak4_bjets = objects.ak4_bjet(
-        #     jets,
-        #     events,
-        #     **self.ak4_bjet_selection,
-        #     **self.ak4_bjet_lepton_selection,
-        # )
+        ak4_bjets = objects.ak4_bjet(
+            jets,
+            events,
+            **self.ak4_bjet_selection,
+            **self.ak4_bjet_lepton_selection,
+        )
         # # JMSR
         # # TODO: add variations per variable
         # bb_jmsr_shifted_vars = get_jmsr(
@@ -375,15 +446,17 @@ class vcbSkimmer(SkimmerABC):
                 **jet_skimvars,
                 "pt_gen": "MatchedGenJetPt",
             }
+        if jetqk_skimvars:
+            jet_skimvars = {**jet_skimvars, **jetqk_skimvars}
 
         ak4JetVars = {
             f"ak4Jet{key}": pad_val(jets[var], num_ak4_jets, axis=1)
             for (var, key) in jet_skimvars.items()
         }
-        # ak4bTagJetVars = {
-        #     f"ak4bTagJet{key}": pad_val(ak4_bjets[var], 6, axis=1)
-        #     for (var, key) in jet_skimvars.items()
-        # }
+        ak4bTagJetVars = {
+            f"ak4bTagJet{key}": pad_val(ak4_bjets[var], 6, axis=1)
+            for (var, key) in jet_skimvars.items()
+        }
 
         """
         if len(ak4_jets_awayfromak8) == 2:
@@ -403,6 +476,32 @@ class vcbSkimmer(SkimmerABC):
                 for (var, key) in jet_skimvars.items()
             }
         """
+
+        # # JEC and JMSR
+        # if self._region == "signal" and isJECs:
+        #     # Jet JEC variables
+        #     for var in ["pt"]:
+        #         key = self.skim_vars["Jet"][var]
+        #         for shift, vals in jec_shifted_jetvars[var].items():
+        #             if shift != "":
+        #                 ak4JetVars[f"ak4Jet{key}_{shift}"] = pad_val(vals, num_ak4_jets, axis=1)
+
+        #     # FatJet JEC variables
+        #     for var in ["pt"]:
+        #         key = self.skim_vars["FatJet"][var]
+        #         for shift, vals in jec_shifted_bbfatjetvars[var].items():
+        #             if shift != "":
+        #                 bbFatJetVars[f"bbFatJet{key}_{shift}"] = pad_val(vals, 2, axis=1)
+
+        #     # FatJet JMSR
+        #     for var in self.jmsr_vars:
+        #         key = fatjet_skimvars[var]
+        #         bbFatJetVars[f"bbFatJet{key}_raw"] = bbFatJetVars[f"bbFatJet{key}"]
+        #         for shift, vals in bb_jmsr_shifted_vars[var].items():
+        #             # overwrite saved mass vars with corrected ones
+        #             label = "" if shift == "" else "_" + shift
+        #             bbFatJetVars[f"bbFatJet{key}{label}"] = vals
+
         # MET
         metVars = {f"MET{key}": met[var].to_numpy() for (var, key) in self.skim_vars["MET"].items()}
 
@@ -416,9 +515,9 @@ class vcbSkimmer(SkimmerABC):
         eventVars["nElectrons"] = ak.num(electrons).to_numpy()
         eventVars["nMuons"] = ak.num(muons).to_numpy()
         eventVars["nJets"] = ak.num(jets).to_numpy()
-        # eventVars["nBJets"] = ak.num(
-        #     jets[jets.btagRobustParTAK4B >= self.ak4_bjet_selection["bcut"]]
-        # ).to_numpy()
+        eventVars["nBJets"] = ak.num(
+            jets[jets.btagRobustParTAK4B >= self.ak4_bjet_selection["bcut"]]
+        ).to_numpy()
 
         # jin for CA
         # eventVars["CA_matched_tau_pt_sum"] = ca_tau_pt_sum.to_numpy()
@@ -463,7 +562,7 @@ class vcbSkimmer(SkimmerABC):
             **HLTVars,
             **leptonVars,
             **ak4JetVars,
-            # **ak4bTagJetVars,
+            **ak4bTagJetVars,
             **metVars,
             # **bbFatJetVars,
             # **trigObjFatJetVars,
@@ -509,7 +608,7 @@ class vcbSkimmer(SkimmerABC):
         # # >=2 AK8 jets passing selections
         # add_selection("ak8_numjets", (ak.num(fatjets) >= 2), *selection_args)
         add_selection("1lep", ak.num(muons) + ak.num(electrons) >= 1, *selection_args)
-        # add_selection("2bjets", ak.num(ak4_bjets) >= 2, *selection_args)
+        add_selection("2bjets", ak.num(ak4_bjets) >= 2, *selection_args)
         # >=1 AK8 jets with pT cut (230 GeV by default)
 
         # # >=1 AK8 jets with mSD >= 40 GeV
@@ -554,17 +653,15 @@ class vcbSkimmer(SkimmerABC):
 
         print("Selection", f"{time.time() - start:.2f}")
 
-        # -----------------------------------------------------------------------------
-        # Event Weights (per-event)
-        # -----------------------------------------------------------------------------
-        # Data events: weight = 1. MC events: genweight * corrections * normalization.
-        totals_dict = {"nevents": n_events}  # Track totals for reporting/normalization.
+        ######################
+        # Weights
+        ######################
+
+        totals_dict = {"nevents": n_events}
 
         if isData:
-            # Data has no MC corrections; assign unit weight per event.
             skimmed_events["weight"] = np.ones(n_events)
         else:
-            # MC: compute nominal + systematic weights inside add_weights(...).
             weights_dict, totals_temp = self.add_weights(
                 events,
                 year,
@@ -572,7 +669,6 @@ class vcbSkimmer(SkimmerABC):
                 gen_weights,
                 gen_selected,
             )
-            # Merge the weight columns into the skim output and keep the totals metadata.
             skimmed_events = {**skimmed_events, **weights_dict}
             totals_dict = {**totals_dict, **totals_temp}
 
@@ -607,20 +703,10 @@ class vcbSkimmer(SkimmerABC):
         gen_weights,
         gen_selected,
     ) -> tuple[dict, dict]:
-        """
-        Adds weights and variations, saves totals for all norm preserving weights and variations
-        """
-
-        # -------------------------------------------------------------------------
-        # Per-event weight construction (MC only)
-        # -------------------------------------------------------------------------
-        # 1) Create a Coffea Weights container that can combine multiple factors.
+        """Adds weights and variations, saves totals for all norm preserving weights and variations"""
         weights = Weights(len(events), storeIndividual=True)
-
-        # 2) Seed the event weight with the generator weight from NanoAOD.
         weights.add("genweight", gen_weights)
 
-        # 3) Add standard MC corrections/variations.
         add_pileup_weight(weights, year, events.Pileup.nPU.to_numpy(), dataset)
         add_ps_weight(weights, events.PSWeight)
 
@@ -628,21 +714,21 @@ class vcbSkimmer(SkimmerABC):
 
         ###################### Save all the weights and variations ######################
 
-        # 4) Identify weights that should preserve normalization across variations.
+        # these weights should not change the overall normalization, so are saved separately
         norm_preserving_weights = hh_vars.norm_preserving_weights
 
-        # 5) Prepare output dictionaries.
+        # dictionary of all weights and variations
         weights_dict = {}
+        # dictionary of total # events for norm preserving variations for normalization in postprocessing
         totals_dict = {}
 
-        # 6) Compute the nominal per-event combined weight.
+        # nominal
         weights_dict["weight"] = weights.weight()
 
-        # 7) Also compute the normalization-preserving partial weight and its total.
+        # norm preserving weights, used to do normalization in post-processing
         weight_np = weights.partial_weight(include=norm_preserving_weights)
         totals_dict["np_nominal"] = np.sum(weight_np[gen_selected])
 
-        # 8) If requested, compute per-event systematic variations.
         if self._systematics:
             for systematic in list(weights.variations):
                 weights_dict[f"weight_{systematic}"] = weights.weight(modifier=systematic)
@@ -660,11 +746,10 @@ class vcbSkimmer(SkimmerABC):
                     # need to save total # events for each variation for normalization in post-processing
                     totals_dict[f"np_{systematic}"] = np.sum(var_weight[gen_selected])
 
-        # 9) Debugging aid: store each individual weight factor separately.
+        # TEMP: save each individual weight TODO: remove
         for key in weights._weights:
             weights_dict[f"single_weight_{key}"] = weights.partial_weight([key])
 
-        # 10) Add theory variations (scale/PDF) for supported datasets.
         ###################### alpha_S and PDF variations ######################
 
         if ("HHTobbbb" in dataset or "HHto4B" in dataset) or dataset.startswith("TTTo"):
@@ -684,7 +769,6 @@ class vcbSkimmer(SkimmerABC):
                 (pdf_weights * weight_np[:, np.newaxis])[gen_selected], axis=0
             )
 
-        # 11) Apply cross section * luminosity normalization to all weights.
         ###################### Normalization (Step 1) ######################
 
         weight_norm = self.get_dataset_norm(year, dataset)
@@ -692,7 +776,7 @@ class vcbSkimmer(SkimmerABC):
         for key, val in weights_dict.items():
             weights_dict[key] = val * weight_norm
 
-        # 12) Also store the unnormalized nominal weight for post-processing checks.
+        # save the unnormalized weight, to confirm that it's been normalized in post-processing
         weights_dict["weight_noxsec"] = weights.weight()
 
         return weights_dict, totals_dict

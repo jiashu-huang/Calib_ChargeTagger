@@ -210,8 +210,7 @@ def gen_selection_Top_semi(
     }
     GenWbcVars = {
         **{
-            f"GenWb{key}": pad_val(w_bc_b[var], 1, axis=1)[:, 0]
-            for (var, key) in skim_vars.items()
+            f"GenWb{key}": pad_val(w_bc_b[var], 1, axis=1)[:, 0] for (var, key) in skim_vars.items()
         },
         "GenWtoBC": w_to_bc.to_numpy(),
     }
