@@ -123,12 +123,16 @@ def good_ak4jets(
     #    jetidtight, jetidtightlepveto = jetid_v12(jets)  # v12 jetid fix
     # else:
     #    raise NotImplementedError(f"Jet ID fix not implemented yet for {nano_version}")
+    # Build the lepton collections used for jet cleaning (soft leptons are ignored).
     electrons = events.Electron
     electrons = electrons[electrons.pt > electron_pt]
 
     muons = events.Muon
     muons = muons[muons.pt > muon_pt]
 
+    # Baseline kinematics + lepton-jet overlap removal using deltaR.
+    # metric_table builds pairwise deltaR between each jet and each lepton.
+    # ak.all(..., axis=2) requires every lepton to be farther than dr_leptons.
     jet_sel = (
         (jets.pt > 15)
         & (np.abs(jets.eta) < 4.7)
