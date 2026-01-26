@@ -203,3 +203,6 @@ num_batches_*.txt
 *_Event_0.txt
 *_fields.csv
 *run-log.txt
+
+# AGENTS.md
+AGENTS.md
