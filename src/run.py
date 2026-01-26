@@ -8,11 +8,13 @@ Usage:
 python src/run.py \
   --processor skimmer \
   --skimmer vcbSkimmer \
-  --year 2022EE \
+  --year 2022 \
   --files /home/jhuan166/Vcb/CMSSW_15_1_0_patch4/output/315d7993-98ba-431b-8fb5-8835abca47cb_CMSSW_15_CHARGE_NanoAOD.root \
   --files-name TT1L2Q \
   --file-tag TT1L2Q \
-  --save-root
+  --save-root \
+  --chunksize 40000 \
+  --maxchunks 0
 """
 
 from __future__ import annotations
@@ -32,14 +34,24 @@ from bbtautau import bbtautau_utils
 
 
 def _parse_skimmer_arg(skimmer: str | None) -> tuple[str, str | None]:
+    """
+    Docstring for _parse_skimmer_arg
+
+    :param skimmer: Description
+    :type skimmer: str | None
+    :return: Description
+    :rtype: tuple[str, str | None]
+
+    Resolve the "--skimmer" value into a module name and optional class name.
+    Examples:
+        "ttSkimmer" -> ("ttSkimmer", None)
+        "vcbSkimmer.py" -> ("vcbSkimmer", None)
+    """
     if not skimmer:
         return "ttSkimmer", None
 
     class_name = None
     module_part = skimmer
-    if ":" in skimmer:
-        module_part, class_name = skimmer.split(":", 1)
-        class_name = class_name.strip() or None
 
     raw_name = Path(module_part).name
     if raw_name.endswith(".py"):
@@ -52,6 +64,10 @@ def _parse_skimmer_arg(skimmer: str | None) -> tuple[str, str | None]:
 def _select_skimmer_class(
     skimmer_module, module_name: str, class_name: str | None
 ) -> type[SkimmerABC]:
+    # Given an imported module and an optional class name, find the SkimmerABC subclass.
+    # Priority: explicit class name -> class matching module name -> unique subclass in module.
+
+    # If a class name is given, try to get it directly.
     if class_name:
         try:
             return getattr(skimmer_module, class_name)
@@ -73,6 +89,7 @@ def _select_skimmer_class(
         ):
             candidates.append(obj)
 
+    # If the module defines exactly one SkimmerABC subclass, pick it.
     if len(candidates) == 1:
         return candidates[0]
     if len(candidates) > 1:
@@ -95,12 +112,15 @@ def get_processor(
     prescale_factor: int | None = None,
     skimmer: str | None = None,
 ):
-    # define processor
+    # Factory for processor instances. Currently only "skimmer" is supported.
+    # This means that your input needs to have "--processor skimmer" in order to run.
     if processor == "skimmer":
+        # Resolve module + class, then import and select the skimmer class.
         skimmer_name, class_name = _parse_skimmer_arg(skimmer)
         skimmer_module = importlib.import_module(f"processors.{skimmer_name}")
         skimmer_cls = _select_skimmer_class(skimmer_module, skimmer_name, class_name)
 
+        # Instantiate the skimmer and pass runtime configuration.
         return skimmer_cls(
             xsecs=xsecs,
             save_systematics=save_systematics,
@@ -113,6 +133,7 @@ def get_processor(
 
 
 def main(args):
+    # Build the processor with all CLI-configured options.
     p = get_processor(
         args.processor,
         args.save_systematics,
@@ -124,16 +145,20 @@ def main(args):
         args.skimmer,
     )
 
+    # Select output formats by processor type (skimmer always saves both).
     save_parquet = {"skimmer": True}[args.processor]
     save_root = {"skimmer": True}[args.processor]
 
+    # By default, skip bad files unless we are explicitly running on data.
     skipbadfiles = True
 
     if len(args.files):
+        # Direct file list given on the command line: build a single-entry fileset.
         fileset = {f"{args.year}_{args.files_name}": args.files}
         skipbadfiles = False  # not added functionality for args.files yet
     else:
         if args.yaml:
+            # YAML workflow: load list of samples + subsamples for the given year.
             with Path(args.yaml).open() as file:
                 samples_to_submit = yaml.safe_load(file)
             try:
@@ -146,9 +171,11 @@ def main(args):
             for sample in samples:
                 subsamples.extend(samples_to_submit[sample].get("subsamples", []))
         else:
+            # CLI workflow: use samples + subsamples provided in arguments.
             samples = args.samples
             subsamples = args.subsamples
 
+        # Build fileset from index JSON with start/end slice limits.
         fileset = run_utils.get_fileset(
             f"data/index_{args.year}.json",
             args.year,
@@ -165,8 +192,10 @@ def main(args):
 
     print(f"Running on fileset {fileset}")
     if args.executor == "dask":
+        # Distributed execution on a Dask cluster.
         run_utils.run_dask(p, fileset, args)
     else:
+        # Local execution via Coffea's iterative executor.
         run_utils.run(
             p,
             fileset,
@@ -181,7 +210,9 @@ def main(args):
 
 
 if __name__ == "__main__":
+    # Top-level CLI entrypoint: define arguments, validate, then launch main().
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    # Common args shared across different workflows.
     run_utils.parse_common_run_args(parser)
     run_utils.parse_common_hh_args(parser)
     bbtautau_utils.parse_common_run_args(parser)
@@ -196,6 +227,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
+    # Normalize "year" argument to a single value if a one-element list is passed.
     if isinstance(args.year, list):
         if len(args.year) == 1:
             args.year = args.year[0]
