@@ -361,3 +361,155 @@ def gen_selection_HH4b(
     GenbVars = {f"Genb{key}": pad_val(bs[var], 4, axis=1) for (var, key) in P4.items()}
 
     return {**GenHiggsVars, **GenbVars}
+
+
+def gen_selection_Vcb(
+    events: NanoEventsArray,
+    jets: JetArray,
+    electrons: LepArray,
+    muons: LepArray,
+    selection_args: list,  # noqa: ARG001
+    skim_vars: dict,
+    # P4_dict: dict,
+):
+    """
+    Get gen variables for Vcb analysis.
+    """
+
+    # Find generator-level top quarks from the hard process (last copy) and
+    # save their kinematic variables for downstream skims.
+    tops = events.GenPart[
+        (abs(events.GenPart.pdgId) == TOP_PDGID) * events.GenPart.hasFlags(GEN_FLAGS)
+    ]
+    GenTopVars = {f"GenTop{key}": tops[var].to_numpy() for (var, key) in skim_vars.items()}
+
+    # Collect the distinct top daughters (b and W), keeping only hard-process, last-copy.
+    daughters = ak.flatten(tops.distinctChildren, axis=2)
+    daughters = daughters[daughters.hasFlags(["fromHardProcess", "isLastCopy"])]
+    daughters_pdgId = abs(daughters.pdgId)
+
+    # Store the two W bosons from the top decays (top and anti-top order is not fixed).
+    wboson_0 = ak.firsts(daughters[(daughters_pdgId == W_PDGID)][:, 0:1])
+    wboson_1 = ak.firsts(daughters[(daughters_pdgId == W_PDGID)][:, 1:2])
+    GenTopVars = {
+        **GenTopVars,
+        **{f"GenTopW0{key}": wboson_0[var].to_numpy() for (var, key) in skim_vars.items()},
+        **{f"GenTopW1{key}": wboson_1[var].to_numpy() for (var, key) in skim_vars.items()},
+    }
+
+    # Gather W bosons and their final-state children (hard process, last copy).
+    wbosons = daughters[(daughters_pdgId == W_PDGID)]
+    wboson_children = wbosons.distinctChildren
+    wboson_children = wboson_children[wboson_children.hasFlags(["fromHardProcess", "isLastCopy"])]
+    wboson_children_pdgId = abs(wboson_children.pdgId)
+
+    # Identify W -> b c decays (both b and c present among W children).
+    w_has_b = ak.any(wboson_children_pdgId == 5, axis=2)
+    w_has_c = ak.any(wboson_children_pdgId == 4, axis=2)
+    w_bc_mask = w_has_b & w_has_c
+    w_to_bc = ak.any(w_bc_mask, axis=1)
+
+    # Extract the b from W -> b c, if present, for GenWb* variables.
+    w_bc_children = wboson_children[w_bc_mask]
+    w_bc_b = ak.flatten(w_bc_children[abs(w_bc_children.pdgId) == 5], axis=2)
+
+    # Flatten W children to a single list per event for lepton/quark identification.
+    wboson_daughters = ak.flatten(wboson_children, axis=2)
+    wboson_daughters_pdgId = abs(wboson_daughters.pdgId)
+
+    # Identify the b quarks from the top decays.
+    bquark = daughters[(daughters_pdgId == 5)]
+    # matched_to_top = fatjets.metric_table(tops) < 0.8
+    # is_fatjet_matched = ak.any(matched_to_top, axis=2)
+
+    # Leptonic W children mask (e, mu) and lepton+neutrino mask (e, mu, nu_e, nu_mu).
+    lep_mask = (wboson_daughters_pdgId == 11) | (wboson_daughters_pdgId == 13)
+    lep_nu_mask = (
+        (wboson_daughters_pdgId == 11)
+        | (wboson_daughters_pdgId == 13)
+        | (wboson_daughters_pdgId == 12)
+        | (wboson_daughters_pdgId == 14)
+    )
+    # First lepton per event/top (used for reco-gen matching against electrons/muons).
+    lepdecay = wboson_daughters[lep_mask]
+    ls_0 = ak.firsts(lepdecay[:, 0:1])  # first lepton per event/top
+    #    all_local_indices = ak.local_index(wboson_daughters, axis =1)
+    ## Debug prints: inspect lepton masks and selected quark daughters.
+    # print(lep_mask)
+    # print(lep_nu_mask)
+    # lep_indices = all_local_indices[lep_mask]
+    # print(lep_indices)
+
+    # Non-lepton/non-neutrino W children are treated as quarks from the W decay.
+    non_lep_nu_mask = ~lep_nu_mask
+
+    # First two quark daughters from W decay (used as GenQ1/GenQ2).
+    quark_daughters = wboson_daughters[non_lep_nu_mask]
+    print(quark_daughters)
+    qs_2 = ak.firsts(quark_daughters[:, 0:1])
+    qs_3 = ak.firsts(quark_daughters[:, 1:2])
+    # First two b quarks from top decays (top and anti-top).
+    bs_0 = ak.firsts(bquark[:, 0:1])
+    bs_1 = ak.firsts(bquark[:, 1:2])
+
+    # Save gen-level b quarks from top decays.
+    GenTopBVars = {
+        **{f"GenTopB0{key}": bs_0[var].to_numpy() for (var, key) in skim_vars.items()},
+        **{f"GenTopB1{key}": bs_1[var].to_numpy() for (var, key) in skim_vars.items()},
+    }
+    # Save the b quark from W -> b c (if present) and a per-event flag for W->bc.
+    GenWbcVars = {
+        **{
+            f"GenWb{key}": pad_val(w_bc_b[var], 1, axis=1)[:, 0] for (var, key) in skim_vars.items()
+        },
+        "GenWtoBC": w_to_bc.to_numpy(),
+    }
+
+    # Save the two quark daughters from W (and their PDG IDs).
+    GenQVars = {
+        **{f"GenQ1{key}": qs_2[var].to_numpy() for (var, key) in skim_vars.items()},
+        **{f"GenQ2{key}": qs_3[var].to_numpy() for (var, key) in skim_vars.items()},
+        "GenQ1PdgId": qs_2.pdgId.to_numpy(),
+        "GenQ2PdgId": qs_3.pdgId.to_numpy(),
+    }
+
+    # Tag reconstructed objects by proximity to gen objects (for matching studies).
+    # Jets matched to b from top; jets matched to W quark daughters; leptons matched to W lepton.
+    jets["NumBMatchedTop1"] = ak.values_astype(jets.delta_r(bs_0) < 0.4, np.int32)
+    jets["NumBMatchedTop2"] = ak.values_astype(jets.delta_r(bs_1) < 0.4, np.int32)
+    electrons["NumlMatchedTop1"] = ak.values_astype(electrons.delta_r(ls_0) < 0.2, np.int32)
+    muons["NumlMatchedTop1"] = ak.values_astype(muons.delta_r(ls_0) < 0.2, np.int32)
+    jets["NumQMatchedTop1"] = ak.values_astype(jets.delta_r(qs_2) < 0.4, np.int32)
+    jets["NumQMatchedTop2"] = ak.values_astype(jets.delta_r(qs_3) < 0.4, np.int32)
+
+    # Pad per-jet/per-lepton match info to fixed sizes for the output format.
+    num_jets = 6
+    JetVars = {
+        f"ak4{var}": pad_val(jets[var], num_jets, axis=1)
+        for var in [
+            # "TopMatch",
+            # "TopMatchIndex",
+            "NumBMatchedTop1",
+            "NumBMatchedTop2",
+            "NumQMatchedTop1",
+            "NumQMatchedTop2",
+        ]
+    }
+    num_lep = 3
+    EleVars = {
+        f"electrons{var}": pad_val(electrons[var], num_lep, axis=1)
+        for var in [
+            "NumlMatchedTop1",
+        ]
+    }
+
+    # Same lepton matching info for muons (kept for consistency, even if unused elsewhere).
+    MuonVars = {
+        f"muons{var}": pad_val(muons[var], num_lep, axis=1)
+        for var in [
+            "NumlMatchedTop1",
+        ]
+    }
+
+    # Return all gen-level and matching-related variables for the Vcb analysis.
+    return {**GenTopVars, **JetVars, **EleVars, **MuonVars, **GenTopBVars, **GenWbcVars, **GenQVars}
