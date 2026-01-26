@@ -62,6 +62,11 @@ logger.setLevel(logging.INFO)
 package_path = str(pathlib.Path(__file__).parent.parent.resolve())
 
 
+# -----------------------------------------------------------------------------
+# Class definition:
+# -----------------------------------------------------------------------------
+
+
 class vcbSkimmer(SkimmerABC):
     """
     Skims nanoaod files, saving selected branches and events passing preselection cuts
@@ -83,7 +88,7 @@ class vcbSkimmer(SkimmerABC):
             "ParTPosvsNeg": "ParTPosvsNeg",
             "PflavCharge": "PflavCharge",
             "FlavSplit": "FlavSplit",
-            "btagRobustParTAK4B": "btagRobustParTAK4B",
+            # "btagRobustParTAK4B": "btagRobustParTAK4B",
         },
         "MET": {
             "pt": "Pt",
@@ -107,22 +112,22 @@ class vcbSkimmer(SkimmerABC):
             "phi": "Phi",
             "filterBits": "Bit",
         },
+        "HLT": {  # Save HLT through skim_vars?
+            "Ele20_WPTight_Gsf": "Ele20_WPTight_Gsf",
+        },
     }
 
-    # bcut = 0.4319
-    # ak4_bjet_selection = {
-    #     "pt": 25,
-    #     "eta_max": 2.5,
-    #     "id": "tight",
-    #     "dr_leptons": 0.4,
-    #     "bcut": bcut,
-    # }
+    # We will not b-tag the jets at the Coffea skimmer processing level.
+    # This is because our analysis would require testing multiple working points.
 
-    # ak4_bjet_lepton_selection = {
-    #     "electron_pt": 5,
-    #     "muon_pt": 7,
-    # }
+    # This is a small dict of lepton pT cuts when selecting b-jets for ak4 jets.
+    ak4_jet_lepton_selection = {  # noqa: RUF012
+        "electron_pt": 5,
+        "muon_pt": 7,
+    }
 
+    # The constructor method, which is run automatically when an instance of the class is created.
+    # Keep these variables in the function signature, as they are set by run.py.
     def __init__(
         self,
         xsecs: dict = None,
@@ -133,67 +138,55 @@ class vcbSkimmer(SkimmerABC):
         fatjet_bb_preselection: bool = False,
         prescale_factor: int = None,
     ):
+        # Initialize the base Processor/Skimmer state first.
         super().__init__()
 
+        # Store per-dataset cross sections (pb), falling back to empty if not provided.
         self.XSECS = xsecs if xsecs is not None else {}  # in pb
 
         # HLT selection
+        # Build the HLT map, then pick the list for the requested analysis region.
         self.HLTs = {"signal": HLTs.hlt_list(hlt_prefix=False)}
         self.HLTs = self.HLTs[region]
+        # Persist configuration flags for later processing steps.
         self._systematics = save_systematics
         self._nano_version = nano_version
         self._region = region
+        # Coffea accumulator to collect outputs from process().
         self._accumulator = processor.dict_accumulator({})
+        # Options controlling fatjet preselection and optional prescale.
         self._fatjet_bb_preselection = fatjet_bb_preselection
         self._prescale_factor = prescale_factor
+        # Optional fatjet pT override.
         self._fatjet_pt_cut = fatjet_pt_cut
 
-        # CA variablesa
-        """
-        ca_vars = [
-            "mass",
-            "msoftdrop",
-            "globalParT_massVisApplied",
-            "globalParT_massResApplied",
-            "particleNet_mass_legacy",
-            "isDauTau",
-            "dau0_pt",
-            "dau1_pt",
-            "dau0_eta",
-            "dau1_eta",
-            "dau0_phi",
-            "dau1_phi",
-            "dau0_mass",
-            "dau1_mass",
-            "ntaus_perfatjets",
-            "mass_subjets",
-            "mass_boostedtaus",
-            "nsubjets_perfatjets",
-        ]
-
-        self.skim_vars["FatJet"] = {
-            **self.skim_vars["FatJet"],
-            **{f"CA_{var}": f"CA{var}" for var in ca_vars},
-        }
-
-        # update fatjet pT cut
-        if fatjet_pt_cut is not None:
-            self.fatjet_selection["pt"] = fatjet_pt_cut
-        """
+        # Log the configuration for user visibility.
         logger.info(
             f"Running skimmer with:\nsystematics {self._systematics}\nregion {self._region}"
         )
 
-    @property
+    @property  # a decorator that turns a method into a read-only attribute
     def accumulator(self):
-        return self._accumulator
+        return self._accumulator  # This is defined above in __init__
 
+    # The main processing method, called for each chunk of events.
     def process(self, events: ak.Array):
-        """Runs event processor for different types of jets"""
+        """
+        Runs event processor for different types of jets.
 
+        Abbreviations:
+        - JEC: Jet Energy Corrections
+        - JMSR: Jet Mass Scale Resolution
+        - ak4: anti-kT R=0.4 jets
+        """
+
+        # Define start time for debug prints
         start = time.time()
+
+        # Log the number of input events.
         logging.info(f"# events {len(events)}")
 
+        # Extract year and dataset from metadata.
         year = events.metadata["dataset"].split("_")[0]
         dataset = "_".join(events.metadata["dataset"].split("_")[1:])
 
@@ -229,21 +222,19 @@ class vcbSkimmer(SkimmerABC):
         # Object definitions
         #########################
 
-        print("starting object selection", f"{time.time() - start:.2f}")
+        print("\nStarting object selection", f"{time.time() - start:.2f}")
 
-        # Leptons
-        num_leptons = 3  # remove this
+        # Leptons (electrons and muons)
+        num_leptons = 3  # We will save up to 3 leptons
         electrons, etrigvars = objects.good_electrons(events, events.Electron, year)
         muons, mtrigvars = objects.good_muons(events, events.Muon, year)
-        # taus, ttrigvars = objects.good_taus(events, events.Tau, year)
-        # boostedtaus = objects.good_boostedtaus(events, events.boostedTau)
 
         # These are bools saying if the lepton is matched to a trigger object or not
         trigMatchVars = {**etrigvars, **mtrigvars}
         for key, val in trigMatchVars.items():
             trigMatchVars[key] = pad_val(val, num_leptons, False, axis=1).astype(int)
 
-        print("Leptons", f"{time.time() - start:.2f}")
+        print("* Leptons:\t", f"{time.time() - start:.2f}")
 
         # TODO: lepton systematics
 
@@ -266,84 +257,29 @@ class vcbSkimmer(SkimmerABC):
         else:
             met = events.PFMET
 
-        print("ak4 JECs", f"{time.time() - start:.2f}")
+        print("* ak4 JECs:\t", f"{time.time() - start:.2f}")
 
         jets = objects.good_ak4jets(
             jets,
             self._nano_version,
             events,
-            muon_pt=self.ak4_bjet_lepton_selection["muon_pt"],
-            electron_pt=self.ak4_bjet_lepton_selection["electron_pt"],
+            muon_pt=self.ak4_jet_lepton_selection["muon_pt"],
+            electron_pt=self.ak4_jet_lepton_selection["electron_pt"],
             dr_leptons=0.4,
         )
         ht = ak.sum(jets.pt, axis=1)
-        print("ak4", f"{time.time() - start:.2f}")
+        print("* ak4:\t", f"{time.time() - start:.2f}")
 
-        # AK8 Jetsa
-        """
-        num_ak8_jets = 3
-        fatjets = objects.get_ak8jets(events.FatJet)  # this adds all our extra variables e.g. TXbb
-        fatjets, jec_shifted_fatjetvars = JEC_loader.get_jec_jets(
-            events,
-            fatjets,
-            year,
-            isData,
-            jecs=utils.jecs,
-            fatjets=True,
-            applyData=True,
-            dataset=dataset,
-            nano_version=self._nano_version,
-        )
-        print("ak8 JECs", f"{time.time() - start:.2f}")
-
-        fatjets = objects.good_ak8jets(
-            fatjets, **self.fatjet_selection, nano_version=self._nano_version
-        )
-
-        # VBF objects
-        vbf_jets = objects.vbf_jets(
-            jets,
-            fatjets[:, :2],
-            events,
-            **self.vbf_jet_selection,
-            **self.vbf_veto_lepton_selection,
-        )
-
-        # # AK4 objects away from first two fatjets
-        ak4_jets_awayfromak8 = objects.ak4_jets_awayfromak8(
-            jets,
-            fatjets[:, :2],
-            events,
-            **self.ak4_bjet_selection,
-            **self.ak4_bjet_lepton_selection,
-            sort_by="nearest",
-        )
-        """
-        # ak4_bjets = objects.ak4_bjet(
-        #     jets,
-        #     events,
-        #     **self.ak4_bjet_selection,
-        #     **self.ak4_bjet_lepton_selection,
-        # )
-        # # JMSR
-        # # TODO: add variations per variable
-        # bb_jmsr_shifted_vars = get_jmsr(
-        #     fatjets_xbb,
-        #     2,
-        #     jmsr_vars=self.jmsr_vars,
-        #     jms_values={key: [1.0, 0.9, 1.1] for key in self.jmsr_vars},
-        #     jmr_values={key: [1.0, 0.9, 1.1] for key in self.jmsr_vars},
-        #     isData=isData,
-        # )
+        # We will not use ak8 jets or JMSR for this analysis.
 
         #########################
         # Save / derive variables
         #########################
 
-        # Gen variables - saving HH and bbbb 4-vector info
+        # Gen variables
         genVars = {}
-        for d in gen_selection_dict:
-            if d in dataset:
+        for d in gen_selection_dict:  # gen_selection_dict is defined in GenSelection.py
+            if d in dataset:  # dataset is extracted from events metadata
                 vars_dict = gen_selection_dict[d](
                     events, jets, electrons, muons, selection_args, P4
                 )
@@ -580,6 +516,7 @@ class vcbSkimmer(SkimmerABC):
         # Reshape and apply selections
         ##############################
 
+        # This is where the selection happens!
         sel_all = selection.all(*selection.names)
         skimmed_events = {
             key: value.reshape(len(skimmed_events["weight"]), -1)[sel_all]
