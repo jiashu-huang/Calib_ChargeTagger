@@ -54,6 +54,7 @@ from . import GenSelection, objects  # Local gen selection and object definition
 # mapping samples to the appropriate function for doing gen-level selections
 gen_selection_dict = {
     "TT1L2Q": GenSelection.gen_selection_Vcb,
+    "TTtoLNu2Q": GenSelection.gen_selection_Vcb,
 }
 
 logger = logging.getLogger(__name__)
@@ -624,7 +625,11 @@ class vcbSkimmer(SkimmerABC):
         # 11) Apply cross section * luminosity normalization to all weights.
         ###################### Normalization (Step 1) ######################
 
-        weight_norm = self.get_dataset_norm(year, dataset)
+        # Use TTtoLNu2Q xsec/lumi normalization for the TT1L2Q private sample naming.
+        norm_dataset = (
+            "TTtoLNu2Q" if (dataset == "TT1L2Q" or dataset.startswith("TT1L2Q_")) else dataset
+        )
+        weight_norm = self.get_dataset_norm(year, norm_dataset)
         # normalize all the weights to xsec, needs to be divided by totals in Step 2 in post-processing
         for key, val in weights_dict.items():
             weights_dict[key] = val * weight_norm

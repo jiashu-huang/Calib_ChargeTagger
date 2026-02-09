@@ -2,7 +2,7 @@
 Runs coffea processors on the LPC via either condor or dask.
 
 Author: Jiashu Huang
-Date: Jan 2025
+Date: Jan 2026
 
 Usage:
 python src/run.py \
@@ -11,9 +11,8 @@ python src/run.py \
   --year 2022 \
   --files /home/jhuan166/Vcb/CMSSW_15_1_0_patch4/output/315d7993-98ba-431b-8fb5-8835abca47cb_CMSSW_15_CHARGE_NanoAOD.root \
   --files-name TT1L2Q \
-  --file-tag TT1L2Q \
   --save-root \
-  --chunksize 40000 \
+  --chunksize 100000 \
   --maxchunks 0
 """
 
@@ -22,6 +21,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import inspect
+import pickle
 from pathlib import Path
 
 import yaml
@@ -132,6 +132,132 @@ def get_processor(
         )
 
 
+def _default_naming_tag(args, fileset: dict) -> str:
+    # Use first input filename (stripped + stem) as the default tag.
+    first_file = None
+    if args.files:
+        first_file = args.files[0]
+    else:
+        for files in fileset.values():
+            if files:
+                first_file = files[0]
+                break
+
+    if first_file:
+        base = Path(str(first_file)).name.strip()
+        stem = base.rsplit(".", 1)[0] if "." in base else base
+        return stem[:32] if stem else base[:32]
+
+    return f"{args.starti}-{args.endi}"
+
+
+def _add_final_weight_outputs(filetag: str, year: str, save_root: bool) -> None:
+    """
+    Add a finalWeight column/branch to local batch parquet/root outputs.
+
+    finalWeight is defined as:
+      finalWeight = weight / totals["np_nominal"]
+    where totals are accumulated over the full processed sample in outfiles/<filetag>.pkl.
+    """
+    out_pickle = Path(f"outfiles/{filetag}.pkl")
+    if not out_pickle.exists():
+        print(f"Skipping finalWeight export: missing {out_pickle}")
+        return
+
+    with out_pickle.open("rb") as file:
+        out_dict = pickle.load(file)
+
+    year_key = str(year)
+    if year_key not in out_dict:
+        print(
+            f"Skipping finalWeight export: year {year_key} not found in {out_pickle}. "
+            f"Available: {list(out_dict.keys())}"
+        )
+        return
+
+    datasets = out_dict[year_key]
+    if len(datasets) != 1:
+        print(
+            "Skipping finalWeight export: expected exactly one dataset in this run, "
+            f"found {len(datasets)} ({list(datasets.keys())})."
+        )
+        return
+
+    dataset_name = next(iter(datasets))
+    totals = datasets[dataset_name].get("totals", {})
+    np_nominal = totals.get("np_nominal")
+
+    if np_nominal is None:
+        print(
+            "Skipping finalWeight export: totals['np_nominal'] not found "
+            f"for dataset {dataset_name} (likely data)."
+        )
+        return
+    if np_nominal == 0:
+        print(f"Skipping finalWeight export: np_nominal is 0 for dataset {dataset_name}.")
+        return
+
+    import awkward as ak
+    import numpy as np
+    import pandas as pd
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    import uproot
+
+    parquet_paths = sorted(Path().glob(f"out_{filetag}_batch_*.parquet"))
+    if not parquet_paths:
+        print(f"Skipping finalWeight export: no parquet files found for filetag {filetag}.")
+        return
+
+    for parquet_path in parquet_paths:
+        pddf = pd.read_parquet(parquet_path)
+
+        if isinstance(pddf.columns, pd.MultiIndex):
+            if "weight" not in pddf.columns.get_level_values(0):
+                print(f"Skipping {parquet_path}: missing weight column.")
+                continue
+            weight_block = pddf["weight"]
+            weight_vals = (
+                weight_block.iloc[:, 0] if isinstance(weight_block, pd.DataFrame) else weight_block
+            )
+            # Keep MultiIndex format consistent with existing skim columns.
+            subkey = weight_block.columns[0] if isinstance(weight_block, pd.DataFrame) else 0
+            pddf[("finalWeight", subkey)] = weight_vals.to_numpy() / np_nominal
+        else:
+            if "weight" not in pddf.columns:
+                print(f"Skipping {parquet_path}: missing weight column.")
+                continue
+            pddf["finalWeight"] = pddf["weight"].to_numpy() / np_nominal
+
+        table = pa.Table.from_pandas(pddf)
+        pq.write_table(table, parquet_path)
+
+        if not save_root:
+            continue
+
+        batch_idx = parquet_path.stem.rsplit("_batch_", 1)[-1]
+        root_path = Path(f"nano_skim_{filetag}_batch_{batch_idx}.root")
+        if not root_path.exists():
+            print(f"Skipping ROOT update for batch {batch_idx}: missing {root_path}")
+            continue
+
+        if isinstance(pddf.columns, pd.MultiIndex):
+            events_dict = {
+                key: np.squeeze(pddf[key].values)
+                for key in pddf.columns.get_level_values(0).unique()
+            }
+        else:
+            events_dict = {key: np.squeeze(pddf[key].values) for key in pddf.columns}
+
+        with uproot.recreate(root_path, compression=uproot.LZ4(4)) as rfile:
+            rfile["Events"] = ak.Array(run_utils.flatten_dict(events_dict))
+
+    print(
+        f"Added finalWeight to {len(parquet_paths)} parquet batch(es)"
+        + (" and refreshed matching ROOT file(s)." if save_root else ".")
+    )
+
+
 def main(args):
     # Build the processor with all CLI-configured options.
     p = get_processor(
@@ -194,7 +320,18 @@ def main(args):
     if args.executor == "dask":
         # Distributed execution on a Dask cluster.
         run_utils.run_dask(p, fileset, args)
+        if args.write_final_weight:
+            print(
+                "Skipping finalWeight export for dask executor (only local iterative/futures supported)."
+            )
     else:
+        if args.naming_tag is not None:
+            filetag = args.naming_tag
+        elif args.file_tag is not None:
+            filetag = args.file_tag
+        else:
+            filetag = _default_naming_tag(args, fileset)
+
         # Local execution via Coffea's iterative executor.
         run_utils.run(
             p,
@@ -204,9 +341,12 @@ def main(args):
             skipbadfiles=skipbadfiles,
             save_parquet=save_parquet,
             save_root=save_root and args.save_root,
-            filetag=f"{args.starti}-{args.endi}" if args.file_tag is None else args.file_tag,
+            filetag=filetag,
             batch_size=args.batch_size,
         )
+
+        if args.write_final_weight and args.processor == "skimmer":
+            _add_final_weight_outputs(filetag, str(args.year), save_root and args.save_root)
 
 
 if __name__ == "__main__":
@@ -223,6 +363,24 @@ if __name__ == "__main__":
         help=(
             "Skimmer module name in src/processors, optionally with class name "
             "(e.g., ttSkimmer, vcbSkimmer.py, vcbSkimmer:ttSkimmer)."
+        ),
+    )
+    parser.add_argument(
+        "--naming-tag",
+        type=str,
+        default=None,
+        help=(
+            "Optional output file tag. Preferred over --file-tag when both are set. "
+            "Defaults to the first 32 characters of the input filename (stem)."
+        ),
+    )
+    parser.add_argument(
+        "--write-final-weight",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "For local (iterative/futures) skimmer runs, add finalWeight = weight / np_nominal "
+            "to output parquet files and ROOT branches."
         ),
     )
     args = parser.parse_args()
