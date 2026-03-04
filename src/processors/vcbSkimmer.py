@@ -107,22 +107,13 @@ class vcbSkimmer(SkimmerABC):
         "Pileup": {
             "nPU",
         },
-        "TriggerObject": {
-            "pt": "Pt",
-            "eta": "Eta",
-            "phi": "Phi",
-            "filterBits": "Bit",
-        },
-        "HLT": {  # Save HLT through skim_vars?
-            "Ele20_WPTight_Gsf": "Ele20_WPTight_Gsf",
-        },
     }
 
     # We will not b-tag the jets at the Coffea skimmer processing level.
     # This is because our analysis would require testing multiple working points.
 
-    # This is a small dict of lepton pT cuts when selecting b-jets for ak4 jets.
-    ak4_jet_lepton_selection = {  # noqa: RUF012
+    # Lepton pT thresholds used when cleaning jets of nearby leptons.
+    ak4_bjet_lepton_selection = {  # noqa: RUF012
         "electron_pt": 5,
         "muon_pt": 7,
     }
@@ -264,8 +255,8 @@ class vcbSkimmer(SkimmerABC):
             jets,
             self._nano_version,
             events,
-            muon_pt=self.ak4_jet_lepton_selection["muon_pt"],
-            electron_pt=self.ak4_jet_lepton_selection["electron_pt"],
+            muon_pt=self.ak4_bjet_lepton_selection["muon_pt"],
+            electron_pt=self.ak4_bjet_lepton_selection["electron_pt"],
             dr_leptons=0.4,
         )
         ht = ak.sum(jets.pt, axis=1)
@@ -317,29 +308,6 @@ class vcbSkimmer(SkimmerABC):
             f"ak4Jet{key}": pad_val(jets[var], num_ak4_jets, axis=1)
             for (var, key) in jet_skimvars.items()
         }
-        # ak4bTagJetVars = {
-        #     f"ak4bTagJet{key}": pad_val(ak4_bjets[var], 6, axis=1)
-        #     for (var, key) in jet_skimvars.items()
-        # }
-
-        """
-        if len(ak4_jets_awayfromak8) == 2:
-            ak4JetAwayVars = {
-                f"AK4JetAway{key}": pad_val(
-                    ak.concatenate(
-                        [ak4_jets_awayfromak8[0][var], ak4_jets_awayfromak8[1][var]], axis=1
-                    ),
-                    2,
-                    axis=1,
-                )
-                for (var, key) in jet_skimvars.items()
-            }
-        else:
-            ak4JetAwayVars = {
-                f"AK4JetAway{key}": pad_val(ak4_jets_awayfromak8[var], 2, axis=1)
-                for (var, key) in jet_skimvars.items()
-            }
-        """
         # MET
         metVars = {f"MET{key}": met[var].to_numpy() for (var, key) in self.skim_vars["MET"].items()}
 
@@ -353,15 +321,6 @@ class vcbSkimmer(SkimmerABC):
         eventVars["nElectrons"] = ak.num(electrons).to_numpy()
         eventVars["nMuons"] = ak.num(muons).to_numpy()
         eventVars["nJets"] = ak.num(jets).to_numpy()
-        # eventVars["nBJets"] = ak.num(
-        #     jets[jets.btagRobustParTAK4B >= self.ak4_bjet_selection["bcut"]]
-        # ).to_numpy()
-
-        # jin for CA
-        # eventVars["CA_matched_tau_pt_sum"] = ca_tau_pt_sum.to_numpy()
-        # eventVars["CA_tau_idx_0"] = ca_tau_indices[:, 0].to_numpy()
-        # eventVars["CA_tau_idx_1"] = ca_tau_indices[:, 1].to_numpy()
-        # eventVars["CA_best_fatjet_idx"] = ca_best_fatjet_idx.to_numpy()
 
         if isData:
             pileupVars = {key: np.ones(len(events)) * PAD_VAL for key in self.skim_vars["Pileup"]}
@@ -400,19 +359,8 @@ class vcbSkimmer(SkimmerABC):
             **HLTVars,
             **leptonVars,
             **ak4JetVars,
-            # **ak4bTagJetVars,
             **metVars,
-            # **bbFatJetVars,
-            # **trigObjFatJetVars,
         }
-
-        # if self._region == "signal":
-        #     bdtVars = self.getBDT(bbFatJetVars, vbfJetVars, ak4JetAwayVars, met_pt, "")
-        #     print(bdtVars)
-        #     skimmed_events = {
-        #         **skimmed_events,
-        #         **bdtVars,
-        #     }
 
         print("Vars", f"{time.time() - start:.2f}")
 
@@ -446,45 +394,6 @@ class vcbSkimmer(SkimmerABC):
         # # >=2 AK8 jets passing selections
         # add_selection("ak8_numjets", (ak.num(fatjets) >= 2), *selection_args)
         add_selection("1lep", ak.num(muons) + ak.num(electrons) >= 1, *selection_args)
-        # add_selection("2bjets", ak.num(ak4_bjets) >= 2, *selection_args)
-        # >=1 AK8 jets with pT cut (230 GeV by default)
-
-        # # >=1 AK8 jets with mSD >= 40 GeV
-        # cut_mass = np.sum(ak8FatJetVars["ak8FatJetMsd"] >= 40, axis=1) >= 1
-        # add_selection("ak8_mass", cut_mass, *selection_args)
-
-        # Veto leptons
-        # add_selection(
-        #     "0lep",
-        #     (ak.sum(veto_muon_sel, axis=1) == 0) & (ak.sum(veto_electron_sel, axis=1) == 0),
-        #     *selection_args,
-        # )
-
-        # if self._region == "signal":
-        #     # >=1 bb AK8 jets (ordered by TXbb) with TXbb > 0.8
-        #     cut_txbb = (
-        #         np.sum(
-        #             bbFatJetVars[f"bbFatJet{txbb_str}"] >= self.preselection[self.txbb],
-        #             axis=1,
-        #         )
-        #         >= 1
-        #     )
-        #     add_selection("ak8bb_txbb0", cut_txbb, *selection_args)
-
-        # VBF veto cut (not now)
-        # add_selection("vbf_veto", ~(cut_vbf), *selection_args)
-        """
-        if self._fatjet_bb_preselection:
-            # at least 1 jet with ParTXbbvsQCDTop > 0.3
-            cut_bb = (
-                np.sum(
-                    ak8FatJetVars["ak8FatJetParTXbbvsQCDTop"] >= self.preselection["glopart-v2"],
-                    axis=1,
-                )
-                >= 1
-            )
-            add_selection("ak8_bb_preselection", cut_bb, *selection_args)
-        """
         if self._prescale_factor:
             cut_prescale = events.event % self._prescale_factor == 0
             add_selection("prescale", cut_prescale, *selection_args)
@@ -531,7 +440,7 @@ class vcbSkimmer(SkimmerABC):
         logger.info(f"Cutflow:\n{cutflow}")
 
         print("Return ", f"{time.time() - start:.2f}")
-        print("Columns:", print(list(dataframe.columns)))
+        print("Columns:", list(dataframe.columns))
         return {year: {dataset: {"totals": totals_dict, "cutflow": cutflow}}}
 
     def postprocess(self, accumulator):

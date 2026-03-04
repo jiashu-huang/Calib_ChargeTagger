@@ -254,3 +254,56 @@ python src/run.py   --processor skimmer   --skimmer vcbSkimmer --year 2022 --fil
 ```
 
 Now the problem is to figure out what is happening, that the selection efficiency is less than 10%. (2700 out of 37000).
+
+## 2026-01-28
+
+Please use the command
+
+```bash
+python src/run.py   --processor skimmer   --skimmer vcbSkimmer   --year 2022  --files-name TT1L2Q --files ../CMSSW_15_1_0_patch4/output/810b9db9-3253-4366-a721-5310b2f13e4d_CMSSW_15_CHARGE_NanoAOD.root --save-root   --chunksize 100000   --maxchunks 0
+```
+
+Then move the output file to `/output-root/`.
+
+It is preferable to merge all the root files into a single one for analysis:
+```bash
+cd ./output-root/
+mv merged.root old_merged.root
+hadd -f merged.root old_merged.root [new_root_file]
+# alternatively, hadd -f merged.root *.root
+# Optional:
+#   rm old_merged.root
+```
+
+## 2026-02-09
+
+The weights may be off by a factor of 1000. Check weight calculation.
+
+## 2026-02-27
+
+Use "finalWeight". It normalizes by assuming that the input .root file represents the entire dataset. So if you input a .root file that comprises of 10% of the entire simulation, each event's weight would be 10x the actual weight.
+
+Two testing datasets:
+
+1. `/home/jhuan166/Vcb/cmssw-output/TTtoLplusNu2Q-2Jets_TuneCP5_13p6TeV_amcatnloFXFX-pythia8__Run3Summer22MiniAODv4-130X_mcRun3_2022_realistic_v5-v1__MINIAODSIM/merged-cmssw-charge-root/all_merged_000_024.root` — this comprises of 10% of the entire simulation
+2. `/home/jhuan166/Vcb/cmssw-output/TTtoLplusNu2Q-2Jets_TuneCP5_13p6TeV_amcatnloFXFX-pythia8__Run3Summer22MiniAODv4-130X_mcRun3_2022_realistic_v5-v1__MINIAODSIM/merged-cmssw-charge-root/batch_000.root` — equivalent to five .root files merged into one, about 1/1250 of the entire simulation
+
+## 2026-03-03
+
+I removed cuts on number of b-tags. Might be the correct debugging move.
+
+To run the second (000_024) dataset:
+
+```bash
+python src/run.py \
+  --processor skimmer \
+  --skimmer vcbSkimmer \
+  --year 2022 \
+  --files /home/jhuan166/Vcb/cmssw-output/TTtoLplusNu2Q-2Jets_TuneCP5_13p6TeV_amcatnloFXFX-pythia8__Run3Summer22MiniAODv4-130X_mcRun3_2022_realistic_v5-v1__MINIAODSIM/merged-cmssw-charge-root/all_merged_000_024.root \
+  --files-name TT1L2Q \
+  --save-root \
+  --chunksize 1000000 \
+  --maxchunks 0
+```
+
+Output files is found at

@@ -615,7 +615,7 @@ class ttSkimmer(SkimmerABC):
         logger.info(f"Cutflow:\n{cutflow}")
 
         print("Return ", f"{time.time() - start:.2f}")
-        print("Columns:", print(list(dataframe.columns)))
+        print("Columns:", list(dataframe.columns))
         return {year: {dataset: {"totals": totals_dict, "cutflow": cutflow}}}
 
     def postprocess(self, accumulator):

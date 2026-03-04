@@ -206,3 +206,8 @@ num_batches_*.txt
 
 # AGENTS.md
 AGENTS.md
+AI_LOG.md
+Vcb_OVERVIEW.md
+
+# Diagnostic analysis outputs
+diagnostics/
