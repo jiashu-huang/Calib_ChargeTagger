@@ -117,3 +117,14 @@ e.g.
 ```bash
 python boostedhh/condor/check_jobs.py --analysis bbtautau --tag 25Apr24_v12_private_signal --processor skimmer --check-running --year 2022EE
 ```
+
+## Primary analysis ROOT file (lep-overlap branch)
+
+Use the following file as the correctly processed primary-analysis output:
+
+`/home/jhuan166/Vcb/Calib_ChargeTagger/nano_skim_all_merged_000_024_lep-overlap_uptodate_20260304_lz4.root`
+
+Notes:
+- This merged file covers files `000` to `024`.
+- It comprises about 10% of all input events.
+- For full-dataset normalization, each event basically has an effective `10x` weight.

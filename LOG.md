@@ -307,3 +307,15 @@ python src/run.py \
 ```
 
 Output files is found at
+
+## 2026-03-04
+
+Correctly processed output `.root` file for primary analysis:
+
+`/home/jhuan166/Vcb/Calib_ChargeTagger/nano_skim_all_merged_000_024_lep-overlap_uptodate_20260304_lz4.root`
+
+This file should be used as the primary analysis input for the current `lep-overlap` branch state.
+
+Normalization note:
+- It comprises about 10% of all input events.
+- Each event basically has an effective `10x` weight under full-dataset normalization.

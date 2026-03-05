@@ -226,6 +226,12 @@ class vcbSkimmer(SkimmerABC):
         for key, val in trigMatchVars.items():
             trigMatchVars[key] = pad_val(val, num_leptons, False, axis=1).astype(int)
 
+        # Identify prompt leptons: good leptons that are trigger-matched.
+        # Only these are used for jet-lepton overlap removal, so that b-jets
+        # near soft/non-prompt leptons are preserved.
+        prompt_electrons = electrons[etrigvars["ElectronTrigMatchEGamma"]]
+        prompt_muons = muons[mtrigvars["MuonTrigMatchMuon"]]
+
         print("* Leptons:\t", f"{time.time() - start:.2f}")
 
         # TODO: lepton systematics
@@ -258,6 +264,8 @@ class vcbSkimmer(SkimmerABC):
             muon_pt=self.ak4_bjet_lepton_selection["muon_pt"],
             electron_pt=self.ak4_bjet_lepton_selection["electron_pt"],
             dr_leptons=0.4,
+            cleaning_electrons=prompt_electrons,
+            cleaning_muons=prompt_muons,
         )
         ht = ak.sum(jets.pt, axis=1)
         print("* ak4:\t", f"{time.time() - start:.2f}")
@@ -368,17 +376,15 @@ class vcbSkimmer(SkimmerABC):
         # Selection
         ######################
 
-        HLT_triggered = np.any(
-            np.array(
-                [events.HLT[trigger] for trigger in self.HLTs[year] if trigger in events.HLT.fields]
-            ),
-            axis=0,
-        )
-
-        # don't apply triggers for now, for trigger studies etc.
-        apply_trigger = False
-        if apply_trigger:
-            add_selection("trigger", HLT_triggered, *selection_args)
+        # Require single-lepton trigger: IsoMu24 or Ele32_WPTight_Gsf.
+        # Events failing both are dropped. This is consistent with the
+        # prompt-lepton-only jet cleaning above.
+        single_lep_trigger = np.zeros(len(events), dtype="bool")
+        if "IsoMu24" in events.HLT.fields:
+            single_lep_trigger = single_lep_trigger | events.HLT["IsoMu24"]
+        if "Ele32_WPTight_Gsf" in events.HLT.fields:
+            single_lep_trigger = single_lep_trigger | events.HLT["Ele32_WPTight_Gsf"]
+        add_selection("single_lep_trigger", single_lep_trigger, *selection_args)
 
         # metfilters
         cut_metfilters = np.ones(len(events), dtype="bool")

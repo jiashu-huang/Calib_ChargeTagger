@@ -118,17 +118,22 @@ def good_ak4jets(
     muon_pt: float,
     electron_pt: float,
     dr_leptons: float,
+    cleaning_electrons=None,
+    cleaning_muons=None,
 ):
-    # if nano_version.startswith("v12"):
-    #    jetidtight, jetidtightlepveto = jetid_v12(jets)  # v12 jetid fix
-    # else:
-    #    raise NotImplementedError(f"Jet ID fix not implemented yet for {nano_version}")
-    # Build the lepton collections used for jet cleaning (soft leptons are ignored).
-    electrons = events.Electron
-    electrons = electrons[electrons.pt > electron_pt]
+    # If explicit lepton collections are provided, use them for overlap removal.
+    # Otherwise fall back to the default: all NanoAOD leptons above pT thresholds.
+    if cleaning_electrons is None:
+        electrons = events.Electron
+        electrons = electrons[electrons.pt > electron_pt]
+    else:
+        electrons = cleaning_electrons
 
-    muons = events.Muon
-    muons = muons[muons.pt > muon_pt]
+    if cleaning_muons is None:
+        muons = events.Muon
+        muons = muons[muons.pt > muon_pt]
+    else:
+        muons = cleaning_muons
 
     # Baseline kinematics + lepton-jet overlap removal using deltaR.
     # metric_table builds pairwise deltaR between each jet and each lepton.
@@ -221,7 +226,7 @@ def good_muons(events, leptons: MuonArray, year: str):
     leptons = leptons[lsel]
 
     # Trigger: (filterbit, ptcut for matched lepton)
-    triggers = {"Muon": (3, 26)}
+    triggers = {"Muon": (3, 24)}
     trig_leptons = trigobj[trigobj.id == PDGID.mu]
 
     TrigMatchDict = {
